@@ -2,7 +2,8 @@ import type { Avis, Categorie, Commerce, Commune, DataMode, Notification } from 
 import { API_URL, SUPABASE_ANON_KEY, SUPABASE_URL, hasApi, hasSupabase } from './config'
 import { DEMO_AVIS, DEMO_CATEGORIES, DEMO_COMMERCES, DEMO_COMMUNES, DEMO_NOTIFICATIONS } from './demo'
 
-/* ── Modes : 'api' (REST Render) → 'supabase' (direct) → démo ────── */
+/* ── Modes : 'api' (REST Render) → 'supabase' (direct) → démo ──────
+   ⚠ Tous les ids sont des UUID (schéma réel) → traités comme string. */
 
 let mode: DataMode | null = null
 const memo = new Map<string, unknown>()
@@ -46,15 +47,8 @@ async function sb<T>(path: string, init?: RequestInit): Promise<T> {
   }, 6500)
   if (!res.ok) throw new Error(`Supabase ${res.status}`)
   setMode('supabase')
-  return (await res.json()) as T
-}
-
-async function sbPost(table: string, body: unknown): Promise<void> {
-  await sb(table, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify(body),
-  })
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
 }
 
 /** API prioritaire, puis Supabase, puis démo — avec cache mémoire. */
@@ -77,8 +71,9 @@ async function hybrid<T>(key: string, viaApi: () => Promise<T>, viaSb: () => Pro
 /* ── Mapping Supabase → app ──────────────────────────────────────── */
 
 interface SbCommerceRow {
-  id: number
+  id: string
   nom: string
+  slug?: string | null
   description?: string | null
   adresse?: string | null
   commune?: string | null
@@ -87,7 +82,9 @@ interface SbCommerceRow {
   horaires?: string | null
   photo_url?: string | null
   statut?: string | null
+  actif?: boolean | null
   note_moyenne?: number | null
+  categorie_id?: string | null
   commerce_categories?: Array<{ categories: Categorie | null }> | null
 }
 
@@ -96,8 +93,9 @@ function mapSbCommerce(row: SbCommerceRow): Commerce {
     .map((cc) => cc.categories)
     .filter((k): k is Categorie => k !== null)
   return {
-    id: row.id,
+    id: String(row.id),
     nom: row.nom,
+    slug: row.slug ?? null,
     description: row.description ?? null,
     adresse: row.adresse ?? null,
     commune: row.commune ?? null,
@@ -116,7 +114,7 @@ function mapSbCommerce(row: SbCommerceRow): Commerce {
 
 export interface CommerceFilters {
   q?: string
-  categorie?: number
+  categorie?: string
   commune?: string
 }
 
@@ -124,7 +122,7 @@ export async function getCategories(): Promise<Categorie[]> {
   return hybrid<Categorie[]>(
     'categories',
     () => api('/api/categories'),
-    () => sb('categories?select=*&order=id.asc'),
+    () => sb('categories?select=*&order=ordre.asc'),
     () => DEMO_CATEGORIES,
   )
 }
@@ -133,7 +131,7 @@ export async function getCommunes(): Promise<Commune[]> {
   return hybrid<Commune[]>(
     'communes',
     () => api('/api/communes'),
-    () => sb('communes?select=*&order=id.asc'),
+    () => sb('communes?select=*&order=nom.asc'),
     () => DEMO_COMMUNES,
   )
 }
@@ -141,14 +139,14 @@ export async function getCommunes(): Promise<Commune[]> {
 export async function getCommerces(): Promise<Commerce[]> {
   const viaSb = async (): Promise<Commerce[]> => {
     const rows = await sb<SbCommerceRow[]>(
-      'commerces?select=*,commerce_categories(categories(id,nom,slug,icone))&order=id.asc&limit=300',
+      'commerces?select=*,commerce_categories(categories(id,nom,slug,icone))&order=nom.asc&limit=300',
     )
     return rows.map(mapSbCommerce)
   }
   return hybrid<Commerce[]>('commerces', () => api('/api/commerces'), viaSb, () => DEMO_COMMERCES)
 }
 
-export async function getCommerce(id: number): Promise<Commerce | null> {
+export async function getCommerce(id: string): Promise<Commerce | null> {
   const viaSb = async (): Promise<Commerce | null> => {
     const rows = await sb<SbCommerceRow[]>(
       `commerces?select=*,commerce_categories(categories(id,nom,slug,icone))&id=eq.${id}`,
@@ -165,15 +163,15 @@ export async function getCommerce(id: number): Promise<Commerce | null> {
   )
 }
 
-export async function getAvis(commerceId: number): Promise<Avis[]> {
+export async function getAvis(commerceId: string): Promise<Avis[]> {
   const viaSb = async (): Promise<Avis[]> => {
     const rows = await sb<Array<Record<string, unknown>>>(
       `avis?select=*,utilisateurs(prenom,nom)&commerce_id=eq.${commerceId}&order=cree_le.desc&limit=50`,
     )
     return rows.map((r) => {
       const u = r.utilisateurs as { prenom?: string | null; nom?: string | null } | null
-      const auteur = u ? [u.prenom, u.nom].filter(Boolean).join(' ') || null : null
-      return { ...(r as unknown as Avis), auteur }
+      const auteur = u ? [u.prenom, u.nom].filter(Boolean).join(' ').replace(/\s*\.$/, '') || null : null
+      return { ...(r as unknown as Avis), id: String(r.id), commerce_id: String(r.commerce_id), auteur }
     })
   }
   return hybrid<Avis[]>(
@@ -184,16 +182,33 @@ export async function getAvis(commerceId: number): Promise<Avis[]> {
   )
 }
 
-export async function postAvis(a: Omit<Avis, 'id' | 'cree_le' | 'utilisateurs'>): Promise<void> {
-  if (hasApi) {
-    try { await api('/api/avis', { method: 'POST', body: JSON.stringify(a) }); return } catch { /* repli */ }
-  }
+/**
+ * Publie un avis : RPC publier_avis (pseudo résolu en utilisateur côté base),
+ * puis repli API REST, puis insert direct si l'embed utilisateurs est ouvert.
+ */
+export async function postAvis(a: {
+  commerce_id: string
+  auteur: string
+  note: number
+  commentaire: string
+}): Promise<void> {
   if (hasSupabase) {
-    await sbPost('avis', {
-      commerce_id: a.commerce_id,
-      note: a.note,
-      commentaire: a.commentaire,
-    })
+    try {
+      await sb('rpc/publier_avis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          p_commerce_id: a.commerce_id,
+          p_pseudo: a.auteur,
+          p_note: a.note,
+          p_commentaire: a.commentaire,
+        }),
+      })
+      return
+    } catch { /* repli */ }
+  }
+  if (hasApi) {
+    await api('/api/avis', { method: 'POST', body: JSON.stringify(a) })
     return
   }
   throw new Error('Aucune backend disponible')
@@ -212,15 +227,14 @@ export async function getNotifications(): Promise<Notification[]> {
 
 const FAV_KEY = 'annuaire974.favoris'
 
-export function getFavoris(): number[] {
-  try { return JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]') as number[] } catch { return [] }
+export function getFavoris(): string[] {
+  try { return JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]') as string[] } catch { return [] }
 }
 
-export function toggleFavori(id: number): boolean {
+export function toggleFavori(id: string): boolean {
   const favs = getFavoris()
   const on = !favs.includes(id)
   localStorage.setItem(FAV_KEY, JSON.stringify(on ? [...favs, id] : favs.filter((x) => x !== id)))
   return on
 }
-
 

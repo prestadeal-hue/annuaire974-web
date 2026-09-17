@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast'
 import { EmptyState, SkeletonList, Stars } from '../components/States'
 import { IconClock, IconHeart, IconPhone, IconPin, IconShare, IconStar } from '../components/Icons'
 
-export function CommerceDetail({ id, navigate }: { id: number; navigate: (to: string) => void }) {
+export function CommerceDetail({ id, navigate }: { id: string; navigate: (to: string) => void }) {
   const { commerceById, isFav, toggleFav } = useApp()
   const toast = useToast()
 
@@ -59,7 +59,7 @@ export function CommerceDetail({ id, navigate }: { id: number; navigate: (to: st
       setCommentaire('')
       setNote(5)
       setAvis((prev) => [
-        { id: Date.now(), commerce_id: c.id, auteur: pseudo.trim(), note, commentaire: commentaire.trim(), cree_le: new Date().toISOString() },
+        { id: String(Date.now()), commerce_id: c.id, auteur: pseudo.trim(), note, commentaire: commentaire.trim(), cree_le: new Date().toISOString() },
         ...(prev ?? []),
       ])
     } catch {

@@ -19,11 +19,11 @@ interface AppState {
   commerces: Commerce[]
   loading: boolean
   mode: string | null
-  favoris: number[]
-  isFav: (id: number) => boolean
-  toggleFav: (id: number) => boolean
+  favoris: string[]
+  isFav: (id: string) => boolean
+  toggleFav: (id: string) => boolean
   refresh: () => void
-  commerceById: (id: number) => Commerce | undefined
+  commerceById: (id: string) => Commerce | undefined
 }
 
 const Ctx = createContext<AppState | null>(null)
@@ -99,15 +99,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [tick])
 
   /* Favoris */
-  const [favoris, setFavoris] = useState<number[]>(() => getFavoris())
-  const isFav = useCallback((id: number) => favoris.includes(id), [favoris])
-  const toggleFav = useCallback((id: number) => {
+  const [favoris, setFavoris] = useState<string[]>(() => getFavoris())
+  const isFav = useCallback((id: string) => favoris.includes(id), [favoris])
+  const toggleFav = useCallback((id: string) => {
     const on = toggleFavori(id)
     setFavoris(getFavoris())
     return on
   }, [])
 
-  const commerceById = useCallback((id: number) => commerces.find((c) => c.id === id), [commerces])
+  const commerceById = useCallback((id: string) => commerces.find((c) => c.id === id), [commerces])
 
   const value = useMemo<AppState>(
     () => ({

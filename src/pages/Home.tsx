@@ -7,8 +7,8 @@ import { IconSearch, IconX } from '../components/Icons'
 export function Home({ navigate }: { navigate: (to: string) => void }) {
   const { categories, communes, commerces, loading, mode, refresh } = useApp()
   const [q, setQ] = useState('')
-  const [cat, setCat] = useState<number | null>(null)
-  const [commune, setCommune] = useState<number | null>(null)
+  const [cat, setCat] = useState<string | null>(null)
+  const [commune, setCommune] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     let list = commerces
@@ -85,7 +85,7 @@ export function Home({ navigate }: { navigate: (to: string) => void }) {
         <select
           className="select"
           value={commune ?? ''}
-          onChange={(e) => setCommune(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => setCommune(e.target.value || null)}
           aria-label="Filtrer par commune"
         >
           <option value="">Toute l'île</option>

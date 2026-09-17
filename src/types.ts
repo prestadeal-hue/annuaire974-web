@@ -1,23 +1,25 @@
+/** ⚠ Tous les id sont des UUID → traités comme des string partout. */
+
 export interface Categorie {
-  id: number
+  id: string
   nom: string
   slug?: string | null
   icone?: string | null
+  couleur?: string | null
+  ordre?: number | null
 }
 
 export interface Commune {
-  id: number
+  id: string
   nom: string
+  slug?: string | null
+  code_postal?: string | null
 }
 
-/**
- * Schéma réel Supabase (introspecté via PostgREST, sept. 2026) :
- * commerces.commune est une colonne TEXTE (+ code_postal, latitude, longitude).
- * Pas de whatsapp / nb_avis côté base — le whatsapp dérive du téléphone.
- */
 export interface Commerce {
-  id: number
+  id: string
   nom: string
+  slug?: string | null
   description?: string | null
   adresse?: string | null
   /** Nom de commune en texte (schéma réel) */
@@ -29,6 +31,7 @@ export interface Commerce {
   horaires?: string | null
   photo_url?: string | null
   statut?: string | null
+  actif?: boolean | null
   cree_le?: string | null
   note_moyenne?: number | null
   /** Catégories embarquées (via commerce_categories) */
@@ -37,19 +40,18 @@ export interface Commerce {
 }
 
 export interface Avis {
-  id: number
-  commerce_id: number
+  id: string
+  commerce_id: string
   /** Résolu côté app depuis l'embed utilisateurs (prenom/nom) */
   auteur?: string | null
   note: number
   commentaire?: string | null
   cree_le?: string | null
-  /** Embed PostgREST — anonyme si RLS bloque la lecture des utilisateurs */
   utilisateurs?: { prenom?: string | null; nom?: string | null } | null
 }
 
 export interface Notification {
-  id: number
+  id: string
   titre?: string | null
   message?: string | null
   type?: string | null

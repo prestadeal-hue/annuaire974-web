@@ -10,7 +10,7 @@ export type Route =
   | { name: 'favoris' }
   | { name: 'notifications' }
   | { name: 'compte' }
-  | { name: 'commerce'; id: number }
+  | { name: 'commerce'; id: string }
 
 function parse(hash: string): Route {
   const h = hash.replace(/^#/, '')
@@ -19,8 +19,8 @@ function parse(hash: string): Route {
   if (parts[0] === 'notifications') return { name: 'notifications' }
   if (parts[0] === 'compte') return { name: 'compte' }
   if (parts[0] === 'commerce' && parts[1]) {
-    const id = Number(parts[1])
-    if (Number.isFinite(id)) return { name: 'commerce', id }
+    const id = decodeURIComponent(parts[1])
+    if (id.length > 0) return { name: 'commerce', id }
   }
   return { name: 'home' }
 }

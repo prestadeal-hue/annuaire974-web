@@ -7,7 +7,7 @@ export function CommerceCard({
   onOpen,
 }: {
   commerce: Commerce
-  onOpen: (id: number) => void
+  onOpen: (id: string) => void
 }) {
   const { isFav, toggleFav } = useApp()
   const fav = isFav(c.id)
