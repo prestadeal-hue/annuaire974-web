@@ -40,6 +40,19 @@ L'app essaie dans l'ordre et bascule automatiquement :
 
 Le mode actif est affiché en bas de l'accueil et sur la page Compte.
 
+## 🗃️ Base de données — scripts SQL
+
+Introspection faite via PostgREST : le schéma **réel** diffère de la doc initiale
+(`commerces.commune` est une colonne **texte**, pas de `commune_id`/`whatsapp`/`nb_avis` ;
+`avis.utilisateur_id → utilisateurs` ; `notifications.est_lu`).
+
+| Script | Rôle |
+|---|---|
+| `scripts/rls-policies.sql` | **À exécuter en premier** — les tables contiennent déjà des données mais la clé publique voit 0 ligne (RLS fermée). Ajoute la lecture publique + l'insertion d'avis. Supabase → SQL Editor → Run. |
+| `scripts/seed.sql` | Optionnel — complète/homogénéise les données (10 catégories, 24 communes, 24 commerces, avis, notifs). Idempotent. |
+
+Après `rls-policies.sql`, l'app bascule automatiquement du mode démo vers les vraies données.
+
 ## 🚀 Démarrage
 
 ```bash
@@ -72,7 +85,7 @@ VITE_API_URL=            # URL de l'API Render quand elle sera en ligne
 
 ## 🗺️ Prochaines étapes
 
-- [ ] Peupler Supabase avec `database.sql` (l'app sortira automatiquement du mode démo)
+- [ ] Exécuter `scripts/rls-policies.sql` dans le SQL Editor (débloque la lecture publique)
 - [ ] Pousser l'API sur GitHub → déploiement Render → renseigner `VITE_API_URL`
 - [ ] Connecter l'agent IA (SOUL + AGENTS) à l'API
 - [ ] Comptes utilisateurs (auth Telegram/WhatsApp) et favoris synchronisés

@@ -85,9 +85,12 @@ export function CommerceDetail({ id, navigate }: { id: number; navigate: (to: st
     }
   }
 
+  // WhatsApp dérivé du téléphone (la base n'a pas de colonne whatsapp) —
+  // numéro fixe 0262/0263 → pas de WhatsApp fiable, on garde les mobiles 0692/0693.
+  const isMobile = /^0(692|693)/.test(c.telephone?.replace(/\s/g, '') ?? '')
   const telHref = c.telephone ? `tel:${c.telephone.replace(/\s/g, '')}` : undefined
-  const waHref = c.whatsapp
-    ? `https://wa.me/${c.whatsapp.replace(/[^0-9]/g, '')}`
+  const waHref = isMobile
+    ? `https://wa.me/262${c.telephone!.replace(/\s/g, '').slice(1)}`
     : undefined
 
   return (
@@ -101,14 +104,13 @@ export function CommerceDetail({ id, navigate }: { id: number; navigate: (to: st
         <h1 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{c.nom}</h1>
         <p style={{ margin: '6px 0 0', color: 'rgb(255 255 255 / 0.85)', fontSize: '0.95rem' }}>
           {c.categorie?.nom}
-          {c.communes?.nom ? ` · ${c.communes.nom}` : ''}
+          {c.commune ? ` · ${c.commune}` : ''}
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
           {typeof c.note_moyenne === 'number' && c.note_moyenne > 0 && (
             <span className="rating" style={{ color: '#fff' }}>
               <span className="star" style={{ color: '#FBBF24' }}>★</span>
               {c.note_moyenne.toFixed(1).replace('.', ',')}
-              {typeof c.nb_avis === 'number' && <span className="count" style={{ color: 'rgb(255 255 255 / 0.7)' }}>({c.nb_avis})</span>}
             </span>
           )}
         </div>

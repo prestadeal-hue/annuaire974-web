@@ -41,7 +41,7 @@ export function Notifications() {
                   </div>
                 )}
               </div>
-              {!n.lu && <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--coral-500)', flex: 'none', marginTop: 6 }} aria-label="Non lu" />}
+              {!n.est_lu && <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--coral-500)', flex: 'none', marginTop: 6 }} aria-label="Non lu" />}
             </article>
           ))}
         </div>

@@ -28,10 +28,9 @@ export function CommerceCard({
             <span className="rating">
               <span className="star">★</span>
               {c.note_moyenne.toFixed(1).replace('.', ',')}
-              {typeof c.nb_avis === 'number' && <span className="count">({c.nb_avis})</span>}
             </span>
           )}
-          {c.communes?.nom && <span>📍 {c.communes.nom}</span>}
+          {c.commune && <span>📍 {c.commune}</span>}
         </div>
       </div>
       <button

@@ -18,13 +18,13 @@ export function Home({ navigate }: { navigate: (to: string) => void }) {
         (c) =>
           c.nom.toLowerCase().includes(needle) ||
           (c.description ?? '').toLowerCase().includes(needle) ||
-          (c.communes?.nom ?? '').toLowerCase().includes(needle),
+          (c.commune ?? '').toLowerCase().includes(needle),
       )
     }
     if (cat) list = list.filter((c) => c.categories?.some((k) => k.id === cat))
     if (commune) {
       const nom = communes.find((x) => x.id === commune)?.nom
-      if (nom) list = list.filter((c) => c.communes?.nom === nom)
+      if (nom) list = list.filter((c) => c.commune === nom)
     }
     return list
   }, [commerces, q, cat, commune, communes])
