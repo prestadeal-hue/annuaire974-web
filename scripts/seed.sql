@@ -1,51 +1,48 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  ANNUAIRE 974 — Seed UUID (v2) — aligné sur le schéma réel
---  ⚠ TOUS les id sont des UUID (introspection PostgREST confirmée)
---  Idempotent : relançable sans doublons. Les 10 catégories existent déjà
---  (liées par slug). N'insère que ce qui manque.
+--  ANNUAIRE 974 — Seed UUID (v3) — colonnes vérifiées une à une via PostgREST
+--  ⚠ TOUS les id sont des UUID. Idempotent : relançable sans doublons.
+--  Les 10 catégories existent déjà dans l'instance (liées par slug).
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- ── 0. Note : le seed v1 (ids entiers) n'a jamais pu s'exécuter — les colonnes
 --    id sont UUID, PostgreSQL refuse les entiers. Rien à nettoyer.
 
--- ── 1. COMMUNES (les 24 de La Réunion, uuid fixes v5-like) ───────────
-INSERT INTO communes (id, nom, code_postal, slug, actif)
-SELECT v.id, v.nom, v.cp, v.slug, true
+-- ── 1. COMMUNES (24 de La Réunion) — colonnes réelles : id, nom, code_postal
+--    (pas de slug/actif dans cette instance ; lat/lon dispo mais vides ici)
+INSERT INTO communes (id, nom, code_postal)
+SELECT v.id, v.nom, v.cp
 FROM (VALUES
-  (gen_random_uuid(),
-'97400','saint-denis','Saint-Denis'),
-(gen_random_uuid(),'97460','saint-paul','Saint-Paul'),
-(gen_random_uuid(),'97410','saint-pierre','Saint-Pierre'),
-(gen_random_uuid(),'97430','le-tampon','Le Tampon'),
-(gen_random_uuid(),'97440','saint-andre','Saint-André'),
-(gen_random_uuid(),'97450','saint-louis','Saint-Louis'),
-(gen_random_uuid(),'97420','le-port','Le Port'),
-(gen_random_uuid(),'97419','la-possession','La Possession'),
-(gen_random_uuid(),'97436','saint-leu','Saint-Leu'),
-(gen_random_uuid(),'97438','sainte-marie','Sainte-Marie'),
-(gen_random_uuid(),'97441','sainte-suzanne','Sainte-Suzanne'),
-(gen_random_uuid(),'97412','bras-panon','Bras-Panon'),
-(gen_random_uuid(),'97433','salazie','Salazie'),
-(gen_random_uuid(),'97429','entre-deux','Entre-Deux'),
-(gen_random_uuid(),'97425','les-avirons','Les Avirons'),
-(gen_random_uuid(),'97439','petite-ile','Petite-Île'),
-(gen_random_uuid(),'97442','saint-philippe','Saint-Philippe'),
-(gen_random_uuid(),'97439','sainte-rose','Sainte-Rose'),
-(gen_random_uuid(),'97470','saint-benoit','Saint-Benoît'),
-(gen_random_uuid(),'97480','saint-joseph','Saint-Joseph'),
-(gen_random_uuid(),'97413','cilaos','Cilaos'),
-(gen_random_uuid(),'97431','la-plaine-des-palmistes','La Plaine-des-Palmistes'),
-(gen_random_uuid(),'97413','trois-bassins','Trois-Bassins'),
-(gen_random_uuid(),'97426','etang-sale','L''Étang-Salé')
-) AS v(id, cp, slug, nom)
-WHERE NOT EXISTS (SELECT 1 FROM communes c WHERE c.slug = v.slug);
+  (gen_random_uuid(),'Saint-Denis','97400'),
+  (gen_random_uuid(),'Saint-Paul','97460'),
+  (gen_random_uuid(),'Saint-Pierre','97410'),
+  (gen_random_uuid(),'Le Tampon','97430'),
+  (gen_random_uuid(),'Saint-André','97440'),
+  (gen_random_uuid(),'Saint-Louis','97450'),
+  (gen_random_uuid(),'Le Port','97420'),
+  (gen_random_uuid(),'La Possession','97419'),
+  (gen_random_uuid(),'Saint-Leu','97436'),
+  (gen_random_uuid(),'Sainte-Marie','97438'),
+  (gen_random_uuid(),'Sainte-Suzanne','97441'),
+  (gen_random_uuid(),'Bras-Panon','97412'),
+  (gen_random_uuid(),'Salazie','97433'),
+  (gen_random_uuid(),'Entre-Deux','97429'),
+  (gen_random_uuid(),'Les Avirons','97425'),
+  (gen_random_uuid(),'Petite-Île','97439'),
+  (gen_random_uuid(),'Saint-Philippe','97442'),
+  (gen_random_uuid(),'Sainte-Rose','97439'),
+  (gen_random_uuid(),'Saint-Benoît','97470'),
+  (gen_random_uuid(),'Saint-Joseph','97480'),
+  (gen_random_uuid(),'Cilaos','97413'),
+  (gen_random_uuid(),'La Plaine-des-Palmistes','97431'),
+  (gen_random_uuid(),'Trois-Bassins','97413'),
+  (gen_random_uuid(),'L''Étang-Salé','97426')
+) AS v(id, nom, cp)
+WHERE NOT EXISTS (SELECT 1 FROM communes c WHERE c.nom = v.nom);
 
--- ── 2. COMMERÇANTS : j'utilise la colonne categorie_id directe ───────
---    (plus fiable que la table N-N ; le seed des liaisons suit en secours)
-INSERT INTO commerces (id, nom, slug, description, adresse, commune, code_postal, telephone, horaires, statut, actif, verifie, categorie_id, note_moyenne, latitude, longitude)
-SELECT v.id, v.nom, v.slug, v.description, v.adresse, v.commune, v.cp, v.tel, v.horaires, 'approuve', true, true,
-       (SELECT id FROM categories WHERE slug = v.catslug LIMIT 1),
-       v.note, v.lat, v.lon
+-- ── 2. COMMERÇANTS — colonnes réelles : pas de categorie_id/actif/verifie.
+--    La catégorie passe UNIQUEMENT par la table N-N (section 3).
+INSERT INTO commerces (id, nom, slug, description, adresse, commune, code_postal, telephone, horaires, statut, note_moyenne, latitude, longitude)
+SELECT v.id, v.nom, v.slug, v.description, v.adresse, v.commune, v.cp, v.tel, v.horaires, 'approuve', v.note, v.lat, v.lon
 FROM (VALUES
   (gen_random_uuid(),'La Forge Tatouages','la-forge-tatouages','Salon de tatouage personnalisé, hygiène irréprochable, sur rendez-vous.','12 rue de la Compagnie','Saint-Denis','97400','0262 21 45 67','Mar–Sam 9h–18h','tatoueur',4.8,-20.8789,55.4481),
   (gen_random_uuid(),'Ink Lagon','ink-lagon','Tatouages polynésiens et fineline, flash du vendredi.','4 bd Hubert Delarue','Saint-Pierre','97410','0262 48 12 30','Mer–Dim 10h–19h','tatoueur',4.6,-21.3393,55.4781),
@@ -74,7 +71,7 @@ FROM (VALUES
 ) AS v(id, nom, slug, description, adresse, commune, cp, tel, horaires, catslug, note, lat, lon)
 WHERE NOT EXISTS (SELECT 1 FROM commerces c WHERE c.slug = v.slug);
 
--- ── 3. LIAISONS N-N (secours, si la colonne categorie_id n'était pas la voie) ──
+-- ── 3. LIAISONS N-N commerce ↔ catégorie (la voie officielle) ──────
 INSERT INTO commerce_categories (commerce_id, categorie_id)
 SELECT c.id, k.id
 FROM commerces c
@@ -178,7 +175,8 @@ BEGIN
 
   SELECT id INTO v_user FROM utilisateurs WHERE prenom = v_prenom AND nom = v_nom LIMIT 1;
   IF v_user IS NULL THEN
-    INSERT INTO utilisateurs (prenom, nom, role) VALUES (v_prenom, v_nom, 'client')
+    INSERT INTO utilisateurs (id, prenom, nom, role)
+    VALUES (gen_random_uuid(), v_prenom, v_nom, 'client')
     RETURNING id INTO v_user;
   END IF;
 
