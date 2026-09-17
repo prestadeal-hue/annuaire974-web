@@ -2,9 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Base configurable : /annuaire974-web/ (GitHub Pages) ou /annuaire974/ (tisite.re)
+const BASE = (process.env.VITE_BASE ?? '/annuaire974-web/').replace(/\/?$/, '/')
+
 export default defineConfig({
-  // GitHub Pages sert le site sous /annuaire974-web/
-  base: '/annuaire974-web/',
+  base: BASE,
   plugins: [
     react(),
     VitePWA({
@@ -37,7 +39,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        navigateFallback: '/annuaire974-web/index.html',
+        navigateFallback: `${BASE}index.html`,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/rjsshcmszhxmldzucuqh\.supabase\.co\/rest\/v1\/.*/i,
