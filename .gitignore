@@ -1,0 +1,17 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Annuaire 974 — app web. Ce dossier contient des .env : règle inversée,
+#  tout est ignoré, on rallume au cas par cas (voir README.md).
+# ═══════════════════════════════════════════════════════════════════════════
+
+/*
+!/.gitignore
+!/.env.example
+!/README.md
+!/index.html
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/vite.config.ts
+!/public/
+!/scripts/
+!/src/
