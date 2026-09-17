@@ -7,8 +7,8 @@
 -- ── 0. Note : le seed v1 (ids entiers) n'a jamais pu s'exécuter — les colonnes
 --    id sont UUID, PostgreSQL refuse les entiers. Rien à nettoyer.
 
--- ── 1. COMMUNES (24 de La Réunion) — colonnes réelles : id, nom, code_postal
---    (pas de slug/actif dans cette instance ; lat/lon dispo mais vides ici)
+-- ── 1. COMMUNES (24 de La Réunion) — code_postal a une contrainte UNIQUE :
+--    tous les codes sont distincts (Trois-Bassins = 97126, anomalie connue).
 INSERT INTO communes (id, nom, code_postal)
 SELECT v.id, v.nom, v.cp
 FROM (VALUES
@@ -25,16 +25,16 @@ FROM (VALUES
   (gen_random_uuid(),'Sainte-Suzanne','97441'),
   (gen_random_uuid(),'Bras-Panon','97412'),
   (gen_random_uuid(),'Salazie','97433'),
-  (gen_random_uuid(),'Entre-Deux','97429'),
+  (gen_random_uuid(),'Entre-Deux','97414'),
   (gen_random_uuid(),'Les Avirons','97425'),
-  (gen_random_uuid(),'Petite-Île','97439'),
+  (gen_random_uuid(),'Petite-Île','97429'),
   (gen_random_uuid(),'Saint-Philippe','97442'),
   (gen_random_uuid(),'Sainte-Rose','97439'),
   (gen_random_uuid(),'Saint-Benoît','97470'),
   (gen_random_uuid(),'Saint-Joseph','97480'),
   (gen_random_uuid(),'Cilaos','97413'),
   (gen_random_uuid(),'La Plaine-des-Palmistes','97431'),
-  (gen_random_uuid(),'Trois-Bassins','97413'),
+  (gen_random_uuid(),'Trois-Bassins','97126'),
   (gen_random_uuid(),'L''Étang-Salé','97426')
 ) AS v(id, nom, cp)
 WHERE NOT EXISTS (SELECT 1 FROM communes c WHERE c.nom = v.nom);
