@@ -28,7 +28,8 @@ export interface Commerce {
   latitude?: number | null
   longitude?: number | null
   telephone?: string | null
-  horaires?: string | null
+  /** JSONB côté base : string JSON, objet {lundi: "9h-18h"} ou tableau */
+  horaires?: string | Record<string, string> | string[] | null
   photo_url?: string | null
   statut?: string | null
   actif?: boolean | null

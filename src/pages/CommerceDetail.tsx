@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Avis, Commerce } from '../types'
 import { getAvis, postAvis } from '../lib/api'
+import { formatHoraires } from '../lib/format'
 import { useApp } from '../context/AppContext'
 import { useToast } from '../components/Toast'
 import { EmptyState, SkeletonList, Stars } from '../components/States'
@@ -160,7 +161,7 @@ export function CommerceDetail({ id, navigate }: { id: string; navigate: (to: st
             <span className="ico"><IconClock size={18} /></span>
             <div>
               <div className="lbl">Horaires</div>
-              <div className="val">{c.horaires}</div>
+              <div className="val">{formatHoraires(c.horaires)}</div>
             </div>
           </div>
         )}

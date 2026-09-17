@@ -39,10 +39,10 @@ FROM (VALUES
 ) AS v(id, nom, cp)
 WHERE NOT EXISTS (SELECT 1 FROM communes c WHERE c.nom = v.nom);
 
--- ── 2. COMMERÇANTS — colonnes réelles : pas de categorie_id/actif/verifie.
---    La catégorie passe UNIQUEMENT par la table N-N (section 3).
+-- ── 2. COMMERÇANTS — horaires est un JSONB : on stocke une string JSON
+--    ("Mar–Sam 9h–18h") que l'app sait afficher telle quelle.
 INSERT INTO commerces (id, nom, slug, description, adresse, commune, code_postal, telephone, horaires, statut, note_moyenne, latitude, longitude)
-SELECT v.id, v.nom, v.slug, v.description, v.adresse, v.commune, v.cp, v.tel, v.horaires, 'approuve', v.note, v.lat, v.lon
+SELECT v.id, v.nom, v.slug, v.description, v.adresse, v.commune, v.cp, v.tel, to_jsonb(v.horaires), 'approuve', v.note, v.lat, v.lon
 FROM (VALUES
   (gen_random_uuid(),'La Forge Tatouages','la-forge-tatouages','Salon de tatouage personnalisé, hygiène irréprochable, sur rendez-vous.','12 rue de la Compagnie','Saint-Denis','97400','0262 21 45 67','Mar–Sam 9h–18h','tatoueur',4.8,-20.8789,55.4481),
   (gen_random_uuid(),'Ink Lagon','ink-lagon','Tatouages polynésiens et fineline, flash du vendredi.','4 bd Hubert Delarue','Saint-Pierre','97410','0262 48 12 30','Mer–Dim 10h–19h','tatoueur',4.6,-21.3393,55.4781),
