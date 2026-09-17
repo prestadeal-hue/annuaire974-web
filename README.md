@@ -85,7 +85,9 @@ VITE_API_URL=            # URL de l'API Render quand elle sera en ligne
 
 ## 🗺️ Prochaines étapes
 
-- [ ] Exécuter `scripts/rls-policies.sql` dans le SQL Editor (débloque la lecture publique)
-- [ ] Pousser l'API sur GitHub → déploiement Render → renseigner `VITE_API_URL`
-- [ ] Connecter l'agent IA (SOUL + AGENTS) à l'API
-- [ ] Comptes utilisateurs (auth Telegram/WhatsApp) et favoris synchronisés
+- [x] `rls-policies.sql` exécuté (lecture publique OK)
+- [x] Seed exécuté : 10 catégories · 24 communes · 24 commerces · 8 avis — visibles via la clé publique
+- [x] RPC `publier_avis` active (formulaire d'avis sans compte, validé côté base)
+- [ ] Pousser le repo sur GitHub + déployer le build statique (Netlify/Cloudflare Pages)
+- [ ] Connecter l'agent IA (SOUL + AGENTS) — sans Render : l'app parle à Supabase en direct
+- [ ] Comptes utilisateurs (auth) et favoris synchronisés
