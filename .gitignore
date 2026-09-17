@@ -15,3 +15,5 @@
 !/public/
 !/scripts/
 !/src/
+!/.github/
+!/.github/workflows/
