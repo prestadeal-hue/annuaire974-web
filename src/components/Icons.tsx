@@ -82,6 +82,13 @@ export const IconWifiOff = ({ size, ...p }: P) => (
   </svg>
 )
 
+export const IconChat = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M20 12a7 7 0 0 1-7 7H9l-4 3v-4.6A7 7 0 0 1 6 5h7a7 7 0 0 1 7 7Z" />
+    <path d="M9 11h.01M12 11h.01M15 11h.01" />
+  </svg>
+)
+
 export const IconX = ({ size, ...p }: P) => (
   <svg {...base(size)} {...p}>
     <path d="M6 6l12 12M18 6 6 18" />

@@ -36,11 +36,14 @@ if (badFiles.length > 0) {
 let clean = true
 for (const file of indexed) {
   let content
-  try {
-    content = execSync(`git show HEAD:${JSON.stringify(file)} 2>/dev/null || git cat-file -p HEAD:${JSON.stringify(file)}`, {
-      encoding: 'utf8',
-      maxBuffer: 10 * 1024 * 1024,
-    })
+  try {      // `stdio` bouche les erreurs des deux essais : un fichier encore dans
+      // l'index (nouveau, pas commité) est normal, et un contrôle qui affiche
+      // « fatal: » avant de dire « PROPRE » fait douter de son propre verdict.
+      content = execSync(`git show HEAD:${JSON.stringify(file)} 2>/dev/null || git cat-file -p HEAD:${JSON.stringify(file)}`, {
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
   } catch {
     // fichier pas encore commité — on regarde le contenu indexé via l'index
     try {

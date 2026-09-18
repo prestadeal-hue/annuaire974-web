@@ -70,6 +70,15 @@
   /* Hauteur de la bottom bar */
   --tabbar-h: 60px;
   --header-h: 56px;
+
+  /* La barre d'onglets, vue de l'extérieur : sa hauteur RÉELLE et sa distance au
+     bord bas. Sur mobile elle est collée au bord ; sur grand écran, c'est une
+     pastille flottante (voir le media query plus bas) — donc plus haute et
+     détachée du bord. Les deux valeurs vivent ici, et non dans les règles :
+     la barre et ce qui se pose dessus (l'assistant) lisent les MÊMES, et ne
+     peuvent donc pas se désynchroniser. */
+  --barre-hauteur: calc(var(--tabbar-h) + var(--safe-bottom));
+  --barre-marge: 0px;
 }
 
 [data-theme='dark'] {
@@ -222,12 +231,12 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; }
 
 .tabbar {
   position: fixed;
-  left: 0; right: 0; bottom: 0;
+  left: 0; right: 0; bottom: var(--barre-marge);
   z-index: 50;
   display: flex;
   justify-content: space-around;
   align-items: stretch;
-  height: calc(var(--tabbar-h) + var(--safe-bottom));
+  height: var(--barre-hauteur);
   padding-bottom: var(--safe-bottom);
   background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(16px);
@@ -264,12 +273,17 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; }
 }
 
 @media (min-width: 720px) {
+  /* La pastille flottante : la hauteur et le décalage changent, et les jetons
+     suivent — c'est ce qui garde l'assistant au-dessus d'elle. */
+  :root {
+    --barre-hauteur: calc(var(--tabbar-h) + 12px);
+    --barre-marge: 14px;
+  }
+
   .tabbar {
     left: 50%;
     transform: translateX(-50%);
     width: 480px;
-    height: calc(var(--tabbar-h) + 12px);
-    bottom: 14px;
     padding-bottom: 0;
     border: 1px solid var(--line);
     border-radius: var(--r-full);
@@ -638,6 +652,136 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; }
 }
 
 .btn-sm { padding: 9px 16px; font-size: 0.85rem; }
+
+/* ── L'assistant ──────────────────────────────────────────────────────
+   Il vit au-dessus de la barre d'onglets, jamais dessous : `--barre-hauteur` et
+   `--barre-marge` sont les mêmes jetons que la barre elle-même, donc il ne peut
+   ni passer sous l'encoche d'un iPhone ni chevaucher la pastille du grand écran.
+   (C'est ce que le contrôle navigateur a attrapé : sur 1280 px, la barre flotte à
+   14 px du bord et fait 72 px de haut — les 60 px de `--tabbar-h` ne suffisaient
+   pas, et le bouton mordait dessus.) Il est en `position: fixed` : il ne
+   pousse donc rien, et la mise en page des pages ne change pas d'un pixel.
+   Le bouton DISPARAÎT quand le panneau est ouvert (le panneau a sa croix) :
+   sinon les deux se recouvriraient, au même coin.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.agent-fab {
+  position: fixed;
+  right: var(--s-4);
+  bottom: calc(var(--barre-marge) + var(--barre-hauteur) + var(--s-4));
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: var(--r-full);
+  color: var(--on-brand);
+  background: linear-gradient(135deg, var(--violet-700), var(--coral-500));
+  box-shadow: var(--shadow-2);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.agent-fab:hover { box-shadow: var(--shadow-3); }
+.agent-fab:active { transform: scale(0.93); }
+.agent-fab-ouvert { display: none; }
+
+.agent-panneau {
+  position: fixed;
+  right: var(--s-3);
+  left: var(--s-3);
+  bottom: calc(var(--barre-marge) + var(--barre-hauteur) + var(--s-3));
+  z-index: 85;
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 520px);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+
+.agent-tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.agent-tete strong { font-size: 0.98rem; color: var(--text); }
+.agent-sous { color: var(--text-3); font-size: 0.85rem; font-weight: 600; }
+
+.agent-fil {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.agent-accueil p { margin: 0 0 var(--s-3); color: var(--text-2); font-size: 0.93rem; line-height: 1.5; }
+.agent-exemples { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+.agent-moi,
+.agent-lui {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  font-size: 0.93rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-moi {
+  align-self: flex-end;
+  max-width: 85%;
+  color: #fff;
+  background: linear-gradient(135deg, var(--violet-700), var(--violet-500));
+  border-bottom-right-radius: 6px;
+}
+.agent-lui {
+  align-self: flex-start;
+  max-width: 92%;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border-bottom-left-radius: 6px;
+}
+.agent-attente { color: var(--text-3); font-style: italic; }
+.agent-note { margin: 0; color: var(--text-2); font-size: 0.84rem; }
+
+.agent-form {
+  display: flex;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.agent-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-full);
+  color: var(--text);
+  background: var(--bg);
+  font: inherit;
+  font-size: 0.93rem;
+}
+.agent-form input:focus { outline: 2px solid var(--violet-300); outline-offset: 0; }
+.agent-form .btn { flex: none; }
+
+/* Sur grand écran, une bulle de discussion ne s'étale pas sur toute la page. */
+@media (min-width: 700px) {
+  .agent-panneau {
+    left: auto;
+    width: 400px;
+    max-height: 560px;
+  }
+}
 .btn-block { width: 100%; }
 
 /* ── États ────────────────────────────────────────────────────────── */
@@ -693,7 +837,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; }
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 18px);
+  bottom: calc(var(--barre-marge) + var(--barre-hauteur) + 18px);
   transform: translateX(-50%);
   z-index: 90;
   display: flex;

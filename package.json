@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "icons": "node scripts/generate-icons.mjs",
-    "check-secrets": "node scripts/check-secrets.mjs"
+    "check-secrets": "node scripts/check-secrets.mjs",
+    "check-agent": "node scripts/check-agent.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

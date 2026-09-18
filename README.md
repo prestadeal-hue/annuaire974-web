@@ -50,6 +50,45 @@ Le mode actif est affiché en bas de l'accueil et sur la page Compte.
 > exactement ce que portait `https://annuaire974-api.onrender.com` (un nom sans serveur
 > derrière, HTTP 404) avant d'être retiré.
 
+## 💬 L'assistant — MiMo, sans clé exposée
+
+Le bouton de discussion (en bas à droite) parle à une **Edge Function Supabase**
+(`supabase/functions/chat/index.ts`), jamais directement au modèle.
+
+**Pourquoi pas une variable `VITE_*`** (18/09/2026) : toute variable `VITE_*` utilisée
+par le code finit dans le paquet JavaScript **public** — c'est vérifié, la clé `anon`
+de Supabase y est en clair. Une clé `anon` est publique par conception ; une clé de
+modèle, elle, **paie**, et serait facturée à n'importe qui. Elle vit donc dans les
+secrets Supabase.
+
+Conséquence directe : **aucune variable d'environnement nouvelle**, ni sur GitHub Pages
+ni sur tisite.re. L'assistant réutilise l'URL et la clé `anon` déjà en place.
+
+Ce que la fonction garantit, côté serveur (le client n'est jamais cru) :
+
+| | |
+|---|---|
+| **Aucun commerce inventé** | La liste réelle lui est donnée dans son prompt : ce qu'il ne trouve pas, il ne l'a pas. Un numéro hors annuaire se voit dans `check-agent` |
+| **Bornes** | 10 messages, 1 500 caractères par message, 700 jetons de sortie |
+| **Le site et l'assistant voient la même chose** | Même requête PostgREST que `src/lib/api.ts` |
+| **Pas de bouton mort** | Le widget demande une fois si la fonction existe (un `GET`, gratuit). 404 → il ne s'affiche pas |
+
+**Déploiement** (aucune CLI nécessaire) :
+
+1. Supabase → **Edge Functions** → *Deploy a new function* → nom : `chat`
+2. Coller `supabase/functions/chat/index.ts` en entier — *Verify JWT* **reste activé**
+3. Edge Functions → **Secrets** → `MIMO_API_KEY` = la clé `tp-…`
+
+Puis, depuis un poste qui a le `.env` :
+
+```bash
+npm run check-agent            # la fonction est-elle en ligne ? (gratuit)
+npm run check-agent -- --tester # 3 questions pièges (consomme le modèle)
+```
+
+Le contrôle cherche exactement ce qui ne se voit pas à l'œil : un **numéro absent de
+l'annuaire**, un commerce annoncé qui n'existe pas, une réponse qui parle du modèle.
+
 ## 🗃️ Base de données — scripts SQL
 
 Introspection faite via PostgREST : le schéma **réel** diffère de la doc initiale
@@ -72,6 +111,7 @@ npm run typecheck  # 2 passes : src/ (navigateur) puis vite.config.ts (contexte 
 npm run build      # dist/ + sw.js + manifest
 npm run icons      # régénère les icônes PWA depuis public/logo-tisite.svg
 npm run check-secrets  # contrôle avant commit (règle inversée)
+npm run check-agent    # l'assistant est-il branché ? (voir § L'assistant)
 ```
 
 ## 🔐 Secrets
@@ -103,6 +143,9 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...
 VITE_API_URL=            # laisser VIDE — il n'y a pas d'API (voir § Données)
 ```
 
+L'assistant n'ajoute **rien** à cette liste (voir § L'assistant) : sa clé de modèle est un
+secret Supabase, pas une variable de build.
+
 ## 🗺️ Prochaines étapes
 
 - [x] `rls-policies.sql` exécuté (lecture publique OK)
@@ -110,5 +153,7 @@ VITE_API_URL=            # laisser VIDE — il n'y a pas d'API (voir § Données
 - [x] RPC `publier_avis` active (formulaire d'avis sans compte, validé côté base)
 - [x] Publié sur GitHub + en ligne (GitHub Pages et tisite.re — voir § Déploiement)
 - [x] Architecture tranchée (18/09) : **pas d'API** — l'app parle à Supabase en direct
-- [ ] Connecter l'agent IA (SOUL + AGENTS)
+- [x] Assistant : widget + Edge Function écrits (18/09) — la clé du modèle ne sort jamais du serveur
+- [ ] Assistant : déployer la fonction dans Supabase + le secret `MIMO_API_KEY`, puis `npm run check-agent`
+- [ ] Assistant : écrire sa persona (`SOUL`) — aujourd'hui un prompt système sobre, dans la fonction
 - [ ] Comptes utilisateurs (auth) et favoris synchronisés

@@ -1,6 +1,7 @@
 import { AppProvider, useApp } from './context/AppContext'
 import { ToastProvider } from './components/Toast'
 import { Header, TabBar, OfflineBar } from './components/Shell'
+import { AgentChat } from './components/AgentChat'
 import { useHashRoute } from './hooks/useHashRoute'
 import { Home } from './pages/Home'
 import { CommerceDetail } from './pages/CommerceDetail'
@@ -24,6 +25,7 @@ function Router() {
         {route.name === 'compte' && <Compte />}
       </main>
       <TabBar route={route} />
+      <AgentChat />
     </div>
   )
 }

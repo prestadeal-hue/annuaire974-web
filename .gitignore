@@ -16,5 +16,10 @@
 !/public/
 !/scripts/
 !/src/
+# La fonction Edge de l'assistant : sans cette ligne, elle ne part NI sur GitHub NI
+# dans le déploiement — elle ne vivrait que sur un disque. Le piège a déjà été
+# rencontré ailleurs dans ce dépôt : une liste blanche écrite à la main n'oublie
+# jamais par hasard, elle oublie ce qu'on vient d'ajouter.
+!/supabase/
 !/.github/
 !/.github/workflows/
