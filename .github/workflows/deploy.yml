@@ -29,6 +29,16 @@ jobs:
       - name: Installation
         run: npm ci
 
+      # Les contrôles du dépôt, exécutés ICI parce qu'un run vert doit vouloir
+      # dire « c'est vérifié », pas seulement « ça compile ». Ils sont séparés
+      # pour que l'échec nomme le contrôle, pas le build.
+      # Avant le build : on échoue vite, et rien n'est publié de douteux.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Aucun secret indexé
+        run: npm run check-secrets
+
       - name: Build
         run: npm run build
 
