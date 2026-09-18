@@ -7,6 +7,13 @@
 !/.gitignore
 !/.env.example
 !/README.md
+# Le mode d'emploi des agents (18/09/2026) : Aura et Jimmy poussent eux-mêmes
+# sur ce dépôt depuis ce jour. Leur guide est donc un fichier du dépôt, pas un
+# message — il doit se lire au même endroit que le code qu'il décrit, et une
+# règle d'accès qui ne vit que dans une conversation se réinvente au prochain
+# agent. Même piège que `!/supabase/` plus bas : l'oublier ici, c'est l'écrire
+# pour personne.
+!/CONTRIBUER.md
 !/index.html
 !/package.json
 !/package-lock.json
