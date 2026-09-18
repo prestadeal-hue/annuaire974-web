@@ -39,8 +39,27 @@ jobs:
       - name: Aucun secret indexé
         run: npm run check-secrets
 
+      # Les variables du build viennent des RÉGLAGES DU DÉPÔT (Settings → Secrets and
+      # variables → Actions), jamais du code : ce dépôt est PUBLIC. Et le contrôle
+      # qui suit n'est pas décoratif — c'est exactement la panne qu'on a eue :
+      # sans elles, le build RÉUSSIT, le déploiement RÉUSSIT, et le site publié a
+      # l'air vivant en affichant les données de démonstration (voir la chaîne de
+      # repli d'`src/lib/api.ts` : API → Supabase → démo). Un run vert qui installe
+      # un site faux, c'est pire qu'un run rouge.
+      - name: Configuration du build
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_CLE: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          [ -n "$SUPABASE_URL" ] || { echo "::error::VITE_SUPABASE_URL est vide — Settings → Variables → Actions"; exit 1; }
+          [ -n "$SUPABASE_CLE" ] || { echo "::error::VITE_SUPABASE_ANON_KEY est vide — Settings → Secrets → Actions"; exit 1; }
+          echo "Supabase : configuré (URL ${#SUPABASE_URL} car., clé ${#SUPABASE_CLE} car.)"
+
       - name: Build
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Configuration Pages
         uses: actions/configure-pages@v5
