@@ -23,31 +23,43 @@ const EXEMPLES = ['Un plombier à Saint-Denis', 'Les restos vers Saint-Pierre', 
 /* ── Le contrôle de disponibilité ────────────────────────────────────────────
    Un bouton qui n'aboutit à rien est pire que pas de bouton : c'est l'icône
    noire, en pire. On demande donc à la fonction si elle EXISTE — un GET, jamais
-   une inférence, donc jamais un centime : si elle n'est pas déployée, le réseau
-   répond 404, sans exécuter une ligne de la fonction.
+   une inférence, donc jamais un centime : non déployée, elle répond 404 sans
+   exécuter une ligne de son code.
 
-   Distinction tenue par le code :
-     · 404            → elle n'est pas là : on n'affiche rien (mise en ligne à venir)
-     · autre réponse  → elle est là (405 « méthode non autorisée » = déployée)
-     · pas de réseau  → on ne SAIT pas : on affiche, et c'est la conversation qui
-                        le dira honnêtement (« pas de connexion »)
+   ⚠️ La sonde ne porte AUCUN en-tête, et ce n'est pas un détail : avec
+   `apikey`, la requête déclenche un contrôle CORS préalable, et quand la fonction
+   n'existe pas ce contrôle échoue — le navigateur lève alors une erreur réseau au
+   lieu de rendre le 404. Résultat mesuré : la sonde ne concluait rien, le bouton
+   restait affiché, et il était mort (constaté en production, pas en théorie).
+   Sans en-tête, la requête est dite « simple » : pas de contrôle préalable, et le
+   404 arrive lisible. Déployée, la fonction répond 401 (il manque l'en-tête) — et
+   pour notre question, 401 = « là ».
+
+   Trois états, parce qu'il y en a trois dans la vraie vie :
+     · absente (404)     → rien à l'écran, jamais de bouton mort
+     · présente          → le bouton, et la conversation fait le reste
+     · incertaine        → attente : rien (évite un clignotement) ;
+                           échec réseau : le bouton s'affiche, et le panneau dira
+                           « pas de connexion » — un bouton qui parle reste utile.
    ────────────────────────────────────────────────────────────────────────── */
-function useAgentEnLigne() {
-  const [enLigne, setEnLigne] = useState<boolean | null>(null)
+type Disponibilite = 'attente' | 'presente' | 'absente' | 'incertaine'
+
+function useAgentDisponible(): Disponibilite {
+  const [etat, setEtat] = useState<Disponibilite>('attente')
   useEffect(() => {
     if (!hasAgent) return
     let vivant = true
-    fetch(AGENT_URL, { method: 'GET', headers: { apikey: SUPABASE_ANON_KEY } })
-      .then((r) => { if (vivant) setEnLigne(r.status !== 404) })
-      .catch(() => { /* réseau muet : on ne conclut rien */ })
+    fetch(AGENT_URL, { method: 'GET' })
+      .then((r) => { if (vivant) setEtat(r.status === 404 ? 'absente' : 'presente') })
+      .catch(() => { if (vivant) setEtat('incertaine') })
     return () => { vivant = false }
   }, [])
-  return enLigne
+  return etat
 }
 
 export function AgentChat() {
   const [ouvert, setOuvert] = useState(false)
-  const enLigne = useAgentEnLigne()
+  const dispo = useAgentDisponible()
   const [messages, setMessages] = useState<Message[]>([])
   const [saisie, setSaisie] = useState('')
   const [enCours, setEnCours] = useState(false)
@@ -63,7 +75,7 @@ export function AgentChat() {
     return () => window.removeEventListener('keydown', surTouche)
   }, [])
 
-  if (!hasAgent || enLigne === false) return null
+  if (!hasAgent || dispo === 'attente' || dispo === 'absente') return null
 
   async function envoyer(texte: string) {
     const question = texte.trim()
