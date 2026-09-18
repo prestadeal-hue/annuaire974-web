@@ -54,6 +54,17 @@ git push deploy main                 # 4. en production dans les ~2 minutes
    **garde la dernière bonne version** — le site ne se casse pas, mais ton commit
    est bien sur `main`. Donc pousse quelque chose dont tu es content.
 
+## Deux adresses, et une seule se met à jour toute seule
+
+| Adresse | Ce qui la publie |
+|---|---|
+| `prestadeal-hue.github.io/annuaire974-web` | **automatique** — à chaque push sur `main`, ~2 min |
+| `tisite.re/annuaire974` | **à la main** — `cd /annuaire974 && VITE_BASE=/annuaire974/ npm run build && bash /usr/local/bin/deploy-annuaire.sh` |
+
+C'est le piège le plus bête de ce dépôt : pousser, vérifier GitHub Pages, croire
+que c'est fini — et Saïdou regarde `tisite.re`, où rien n'a bougé. **Après un
+push qui doit se voir, lance le deploy et vérifie le `200`.**
+
 ## Ce que la CI ne fait pas — et c'est à savoir
 
 **La fonction Edge de l'assistant n'est déployée par personne d'automatique.**
