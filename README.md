@@ -164,6 +164,8 @@ Le build (`dist/`) est un site statique, en ligne à deux endroits :
 | https://tisite.re/annuaire974/ | TiSite (nginx) |
 
 ⚠️ **Un `git push` sur `main` est un déploiement en production** (GitHub Pages).
+Les règles git complètes (remote `deploy`, jamais de `--force`, secrets, marche à
+suivre des agents) vivent à un seul endroit : **`CONTRIBUER.md`**.
 
 Netlify, Vercel ou Cloudflare Pages conviendraient aussi — il n'y a aucun code serveur à
 héberger. Variables d'environnement à définir chez l'hébergeur (et dans `.env` pour un
