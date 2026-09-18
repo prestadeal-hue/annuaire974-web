@@ -70,6 +70,8 @@ Ce que la fonction garantit, côté serveur (le client n'est jamais cru) :
 |---|---|
 | **Aucun commerce inventé** | La liste réelle lui est donnée dans son prompt : ce qu'il ne trouve pas, il ne l'a pas. Un numéro hors annuaire se voit dans `check-agent` |
 | **Bornes** | 10 messages, 1 500 caractères par message, 700 jetons de sortie |
+| **Un plafond par IP** | 20 questions par minute, tenu dans la base (`scripts/assistant-limite.sql`) — vérifié à chaque `check-agent` |
+| **Réunion + France** | Le pays vient de Cloudflare (`cf-ipcountry`). S'il manque, on **laisse passer** et on le note : deviner fermerait la porte à La Réunion un jour où l'en-tête change de nom |
 | **Le site et l'assistant voient la même chose** | Même requête PostgREST que `src/lib/api.ts` |
 | **Pas de bouton mort** | Le widget demande une fois si la fonction existe (un `GET`, gratuit). 404 → il ne s'affiche pas |
 
@@ -87,10 +89,24 @@ Ce que la fonction garantit, côté serveur (le client n'est jamais cru) :
 > clé anon (publishable) ou secret.
 >
 > La contrepartie est réelle : **l'endpoint devient public**. La clé MiMo reste protégée,
-> mais la dépense ne l'est pas — d'où les plafonds durs et la liste d'origines
-> (`ORIGINES` : tisite.re, prestadeal-hue.github.io, localhost) dans la fonction. Un vrai
-> plafond par adresse IP demanderait un état partagé, donc une table SQL : c'est le
-> prochain palier si l'abus devient un sujet.
+> la dépense beaucoup moins — d'où **trois barrières**, dans cet ordre :
+>
+> 1. **l'origine** (`ORIGINES` : tisite.re, GitHub Pages, localhost) — un site tiers ne
+>    peut pas s'en servir comme API. Barrière, pas serrure : une origine se falsifie.
+> 2. **le pays** (`PAYS`, défaut `RE,FR`) — c'est là que sont les utilisateurs. Le pays
+>    vient de `cf-ipcountry` ; **s'il manque, on laisse passer**, et le pays est écrit
+>    dans les journaux à chaque appel (c'est la seule façon de vérifier qu'il arrive).
+> 3. **le plafond par IP** (`scripts/assistant-limite.sql`, 20/min) — le seul qui compte
+>    vraiment : il vit dans la base parce que deux instances de la fonction ne se parlent
+>    pas, et un compteur en mémoire ne protégerait rien. Il est incrémenté **avant** la
+>    lecture du corps et avant tout appel au modèle — donc un script qui martèle l'endpoint
+>    est refusé sans dépenser un jeton, et le contrôle peut le prouver gratuitement.
+>
+> Secrets facultatifs, à créer seulement si besoin : `ORIGINES`, `PAYS`,
+> `MAX_PAR_MINUTE`.
+
+**5.** SQL Editor → `scripts/assistant-limite.sql` → *Run* (le plafond par IP).
+Sans lui, la fonction laisse passer et le note dans ses journaux.
 
 Puis, depuis un poste qui a le `.env` :
 
@@ -100,7 +116,9 @@ npm run check-agent -- --tester # 3 questions pièges (consomme le modèle)
 ```
 
 Le contrôle cherche exactement ce qui ne se voit pas à l'œil : un **numéro absent de
-l'annuaire**, un commerce annoncé qui n'existe pas, une réponse qui parle du modèle.
+l'annuaire**, un commerce annoncé qui n'existe pas, une réponse qui parle du modèle —
+puis il épuise le plafond avec des requêtes vides, ce qui prouve qu'il existe **sans
+payer une seule réponse du modèle**.
 
 ## 🗃️ Base de données — scripts SQL
 
@@ -167,6 +185,7 @@ secret Supabase, pas une variable de build.
 - [x] Publié sur GitHub + en ligne (GitHub Pages et tisite.re — voir § Déploiement)
 - [x] Architecture tranchée (18/09) : **pas d'API** — l'app parle à Supabase en direct
 - [x] Assistant : widget + Edge Function écrits (18/09) — la clé du modèle ne sort jamais du serveur
-- [ ] Assistant : déployer la fonction dans Supabase (*Verify JWT* sur **OFF**) + le secret `MIMO_API_KEY`, puis `npm run check-agent`
+- [x] Assistant : fonction `chat` déployée dans Supabase (*Verify JWT* **OFF**) + secret `MIMO_API_KEY`, vérifiée par `npm run check-agent -- --tester`
+- [ ] Assistant : exécuter `scripts/assistant-limite.sql` (plafond par IP) et re-coller la fonction (pays + plafond)
 - [ ] Assistant : écrire sa persona (`SOUL`) — aujourd'hui un prompt système sobre, dans la fonction
 - [ ] Comptes utilisateurs (auth) et favoris synchronisés

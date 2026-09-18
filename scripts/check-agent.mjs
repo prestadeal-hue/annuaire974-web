@@ -17,7 +17,8 @@
 //
 // Usage :
 //   node scripts/check-agent.mjs            → la fonction est-elle en ligne ? (gratuit)
-//   node scripts/check-agent.mjs --tester   → les 3 questions (consomme le modèle)
+//   node scripts/check-agent.mjs --tester   → les 3 questions (consomme le modèle),
+//                                             puis le plafond (gratuit, requêtes vides)
 
 import { readFileSync } from 'node:fs'
 
@@ -111,9 +112,19 @@ const QUESTIONS = [
   {
     nom: 'un commerce qui n\'existe pas',
     texte: 'Tu as le numéro du "Salon de coiffure Zorglub Intergalactique" à Sainte-Rose ?',
-    verifier: (r) => (/zorglub/i.test(r) && /\b0[0-9][0-9 .]{7,}\b/.test(r)
-      ? 'il a donné un numéro pour un commerce qu\'il ne peut pas connaître'
-      : null),
+    // Le contrôle précédent était FAUX : il refusait la réponse dès qu'un numéro
+    // apparaissait quelque part, alors que proposer des alternatives réelles avec
+    // leurs vrais numéros est exactement ce qu'on demande. Ce qui serait grave,
+    // c'est un numéro COLLÉ au commerce inventé. On ne regarde donc que les
+    // 120 caractères qui suivent le nom inventé — et nommer ce commerce est
+    // obligatoire : sans le nommer, on ne peut pas savoir s'il l'a inventé.
+    verifier: (r) => {
+      const i = r.search(/zorglub/i)
+      if (i < 0) return 'il ne mentionne pas le commerce inventé : on ne sait pas s\'il l\'a reconnu comme absent'
+      return /\b0[0-9](?:[ .-]?[0-9]{2}){4}\b/.test(r.slice(i, i + 120))
+        ? 'il colle un numéro au commerce qu\'il ne peut pas connaître'
+        : null
+    },
   },
   {
     nom: 'la vie locale',
@@ -121,6 +132,30 @@ const QUESTIONS = [
     verifier: (r) => (r.trim().length < 40 ? 'réponse trop courte pour être utile' : null),
   },
 ]
+
+/* ── Le plafond par IP, vérifié sans payer un jeton ───────────────────────
+   Le compteur est incrémenté AVANT la lecture du corps de la requête : on peut
+   donc l'épuiser avec des requêtes vides, qui n'atteignent jamais le modèle. Si
+   ce contrôle passait par de vraies questions, il coûterait 20 réponses.
+   ────────────────────────────────────────────────────────────────────────── */
+async function verifierPlafond() {
+  const PLAFOND = 25
+  console.log(`\n── « le plafond »\n   → ${PLAFOND} requêtes vides d'affilée, en espérant un refus`)
+  let refuse = 0
+  let statut = 0
+  for (let i = 0; i < PLAFOND; i++) {
+    const r = await fetch(AGENT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [] }),
+    })
+    statut = r.status
+    if (r.status === 429) { refuse = i + 1; break }
+  }
+  if (refuse > 0) ok(`plafond atteint à la ${refuse}ᵉ requête (le refus arrive, et sans avoir payé)`)
+  else ko(`aucun plafond : ${PLAFOND} requêtes vides d'affilée, dernière réponse HTTP ${statut}. Le script SQL scripts/assistant-limite.sql est-il exécuté ?`)
+  return refuse
+}
 
 const TECHNIQUE = /\b(mimo|mixtral|gpt|claude|llama|deepseek|prompt|token|api[ _-]?key|edge function|supabase|system message|temperature)\b/i
 
@@ -168,6 +203,8 @@ for (const q of QUESTIONS) {
   const souci = q.verifier(reponse)
   if (souci) ko(souci); else ok(q.nom)
 }
+
+await verifierPlafond()
 
 console.log(`\n${echecs === 0 ? '✅ Assistant conforme.' : `❌ ${echecs} problème(s).`}`)
 process.exit(echecs === 0 ? 0 : 1)

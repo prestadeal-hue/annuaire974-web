@@ -32,17 +32,32 @@
 
    CONSÉQUENCE, ET ELLE EST RÉELLE : cet endpoint est public. La clé MiMo reste
    protégée (personne ne peut la lire), mais la DÉPENSE ne l'est pas — qui connaît
-   l'URL peut la faire travailler. D'où, dans le code ci-dessous :
-     · des plafonds durs (messages, longueurs, jetons rendus) ;
-     · une liste d'origines : un site tiers ne peut pas s'en servir comme API.
-   Reste à faire si l'abus devient un sujet : un vrai plafond par adresse IP
-   (une table + un compteur) — c'est un état partagé, donc ça passe par SQL.
+   l'URL peut la faire travailler. Trois barrières, dans cet ordre :
+
+     1. l'ORIGINE — un site tiers ne peut pas s'en servir comme API (barrière, pas
+        serrure : une origine se falsifie avec curl) ;
+     2. le PAYS — La Réunion et la France, parce que c'est là que sont les
+        utilisateurs. Le pays vient de Cloudflare (`cf-ipcountry`). S'il manque,
+        on LAISSE PASSER et on le note : deviner, ici, voudrait dire fermer la
+        porte à La Réunion un jour où l'en-tête change de nom ;
+     3. le PLAFOND PAR IP — 20 questions par minute, tenu dans la base
+        (`scripts/assistant-limite.sql`) et non en mémoire : deux instances de la
+        fonction ne se parlent pas, un compteur local ne protégerait rien.
+
+   Le plafond est appelé AVANT toute dépense, et même avant de lire le corps de la
+   requête : un script qui martèle l'endpoint mérite le même refus, et ça rend le
+   plafond vérifiable sans dépenser un seul jeton.
 
    DÉPLOIEMENT (sans CLI, le plus court) :
      1. Supabase → Edge Functions → « Deploy a new function » → « Via Editor » → nom : `chat`
      2. coller CE fichier entier, puis « Deploy function »
      3. onglet « Details » de la fonction → « Verify JWT with legacy secret » → OFF
      4. Edge Functions → Secrets → `MIMO_API_KEY` = la clé `tp-…`
+     5. SQL Editor → `scripts/assistant-limite.sql` → Run (le plafond par IP)
+
+   Secrets facultatifs, à créer seulement si besoin : `ORIGINES`, `PAYS`,
+   `MAX_PAR_MINUTE` (ils remplacent les valeurs par défaut ci-dessous).
+
    En CLI, l'équivalent :
      supabase functions deploy chat --no-verify-jwt --project-ref rjsshcmszhxmldzucuqh
 
@@ -71,6 +86,45 @@ const ORIGINES = (Deno.env.get('ORIGINES') ?? [
   'http://localhost:5174',
   'http://localhost:4199',
 ].join(',')).split(',').map((o) => o.trim()).filter(Boolean)
+
+/* ── Qui a le droit d'appeler, d'où ─────────────────────────────────────────
+   RE = La Réunion, FR = France. Réglable par le secret `PAYS` (« RE,FR,YT » par
+   exemple) sans retoucher une ligne de code.
+   ─────────────────────────────────────────────────────────────────────────── */
+const PAYS_ACCEPTES = (Deno.env.get('PAYS') ?? 'RE,FR')
+  .split(',').map((p) => p.trim().toUpperCase()).filter(Boolean)
+
+/** Les en-têtes où Cloudflare pose le pays. Le second est une porte de sortie si
+ *  le premier disparaît (un proxy devant la fonction peut le poser). */
+const ENTETES_PAYS = ['cf-ipcountry', 'x-country']
+
+const MAX_PAR_MINUTE = Number(Deno.env.get('MAX_PAR_MINUTE') ?? 20)
+
+/* ── L'IP réelle ────────────────────────────────────────────────────────────
+   `x-forwarded-for` est FALSIFIABLE : un client peut y préposer une valeur, et la
+   vraie IP se retrouve… ajoutée à la fin par le proxy. On lit donc d'abord
+   `cf-connecting-ip`, que Cloudflare réécrit systématiquement ; à défaut, la
+   DERNIÈRE entrée de `x-forwarded-for` (jamais la première). Sans ça, le plafond
+   par IP se contourne en changeant d'en-tête à chaque requête.
+   ─────────────────────────────────────────────────────────────────────────── */
+function ipClient(req: Request): string {
+  const directe = req.headers.get('cf-connecting-ip')?.trim()
+  if (directe) return directe
+  const chaine = req.headers.get('x-forwarded-for')
+  if (chaine) {
+    const morceaux = chaine.split(',').map((m) => m.trim()).filter(Boolean)
+    if (morceaux.length > 0) return morceaux[morceaux.length - 1]
+  }
+  return req.headers.get('x-real-ip')?.trim() ?? ''
+}
+
+function paysClient(req: Request): string | null {
+  for (const entete of ENTETES_PAYS) {
+    const valeur = req.headers.get(entete)?.trim()
+    if (valeur) return valeur.toUpperCase()
+  }
+  return null
+}
 
 const MAX_CARACTERES = 1500      // par message : une question, pas un roman
 const MAX_MESSAGES = 10          // l'historique envoyé par le widget
@@ -128,6 +182,35 @@ const json = (corps: unknown, statut = 200) =>
     headers: { ...CORS, 'Content-Type': 'application/json' },
   })
 
+/* ── Le plafond, tenu par la base ───────────────────────────────────────────
+   `compter_appel` incrémente PUIS décide, en une requête atomique. Si le script
+   SQL n'a pas encore été exécuté (ou si la base tousse), on laisse passer et on
+   le dit dans les journaux : un assistant muet parce qu'un compteur est absent
+   serait pire que le risque qu'on mesure.
+   ─────────────────────────────────────────────────────────────────────────── */
+async function sousPlafond(ip: string): Promise<boolean> {
+  if (!ip) return true
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/compter_appel`, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ p_ip: ip, p_max: MAX_PAR_MINUTE }),
+    })
+    if (!r.ok) {
+      console.error(`[chat] plafond indisponible (${r.status}) — on laisse passer`)
+      return true
+    }
+    return (await r.json()) !== false
+  } catch (err) {
+    console.error(`[chat] plafond injoignable : ${err} — on laisse passer`)
+    return true
+  }
+}
+
 /* ── La liste des commerces, telle que le site la voit ─────────────────────
    Même requête que `src/lib/api.ts` (mêmes colonnes, pas de filtre en plus) : si
    l'assistant voyait autre chose que le site, il répondrait juste sur un annuaire
@@ -177,12 +260,35 @@ async function lireCommerces(): Promise<{ texte: string; nombre: number }> {
 /* ── La porte ─────────────────────────────────────────────────────────────── */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
+  // D'où vient la question — et AVANT le contrôle de méthode, exprès : le widget
+  // demande d'abord si la fonction existe (un GET). Hors zone, ce GET doit
+  // répondre 403, pas 405 : le widget comprend alors « elle ne me servira pas » et
+  // n'affiche aucun bouton, plutôt qu'un bouton qui refusera la question suivante.
+  const ip = ipClient(req)
+  const pays = paysClient(req)
+  console.log(`[chat] pays ${pays ?? 'inconnu'} · ip ${ip || 'inconnue'}`)
+
+  if (pays && !PAYS_ACCEPTES.includes(pays)) {
+    return json({
+      error: 'pays_refuse',
+      message: "L'assistant est ouvert à La Réunion et à la France pour l'instant.",
+    }, 403)
+  }
+
   if (req.method !== 'POST') return json({ error: 'méthode non autorisée' }, 405)
 
   const origine = req.headers.get('origin')
   if (origine && !ORIGINES.includes(origine)) {
     console.error(`[chat] origine refusée : ${origine}`)
     return json({ error: 'origine_refusee' }, 403)
+  }
+
+  if (!(await sousPlafond(ip))) {
+    return json({
+      error: 'trop_vite',
+      message: "Trop de questions d'un coup. Laisse-moi une minute et redemande.",
+    }, 429)
   }
 
   if (!MIMO_API_KEY) {

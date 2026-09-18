@@ -35,11 +35,17 @@ const EXEMPLES = ['Un plombier à Saint-Denis', 'Les restos vers Saint-Pierre', 
    404 arrive lisible. Déployée, la fonction répond 401 (il manque l'en-tête) — et
    pour notre question, 401 = « là ».
 
-   Trois états, parce qu'il y en a trois dans la vraie vie :
-     · absente (404)     → rien à l'écran, jamais de bouton mort
+   Deux réponses veulent dire « elle ne me servira pas » :
+     404 — elle n'est pas déployée ;
+     403 — elle est déployée mais refuse ce visiteur (hors Réunion / France).
+   Dans les deux cas : rien à l'écran. Le GET part sans en-tête `Origin`, donc un
+   403 ici ne peut venir que du pays — pas d'un site tiers.
+
+   Quatre états, parce qu'il y en a quatre dans la vraie vie :
+     · absente (404/403) → rien à l'écran, jamais de bouton mort
      · présente          → le bouton, et la conversation fait le reste
-     · incertaine        → attente : rien (évite un clignotement) ;
-                           échec réseau : le bouton s'affiche, et le panneau dira
+     · attente           → rien (évite un clignotement à l'affichage)
+     · incertaine        → échec réseau : le bouton s'affiche, et le panneau dira
                            « pas de connexion » — un bouton qui parle reste utile.
    ────────────────────────────────────────────────────────────────────────── */
 type Disponibilite = 'attente' | 'presente' | 'absente' | 'incertaine'
@@ -50,7 +56,7 @@ function useAgentDisponible(): Disponibilite {
     if (!hasAgent) return
     let vivant = true
     fetch(AGENT_URL, { method: 'GET' })
-      .then((r) => { if (vivant) setEtat(r.status === 404 ? 'absente' : 'presente') })
+      .then((r) => { if (vivant) setEtat(r.status === 404 || r.status === 403 ? 'absente' : 'presente') })
       .catch(() => { if (vivant) setEtat('incertaine') })
     return () => { vivant = false }
   }, [])
