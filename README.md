@@ -10,7 +10,7 @@ Projet réalisé pour **TiSite** (tisite.re).
 
 - **Recherche instantanée** : nom, métier, commune + filtres catégories (chips) et communes
 - **Fiches commerce** : adresse, téléphone, WhatsApp, horaires, appel en 1 touche, partage natif (Web Share API)
-- **Avis clients** : notes 1–5 étoiles + commentaires, publication API puis repli Supabase
+- **Avis clients** : notes 1–5 étoiles + commentaires, publiés via la RPC `publier_avis` (aucun compte requis)
 - **Favoris** : persistés localement (localStorage), disponibles hors-ligne
 - **Notifications** : nouveaux commerces, promos, astuces
 - **Thème clair / sombre** : suit le système, mémorisé
@@ -29,16 +29,26 @@ Violet/indigo moderne + accents corail (choisie avec le client) :
 
 Tous les tokens sont dans `src/styles.css`.
 
-## 🛰️ Données — mode hybride
+## 🛰️ Données — Supabase en direct
 
 L'app essaie dans l'ordre et bascule automatiquement :
 
-1. **API REST Node.js** (Render) — si `VITE_API_URL` est renseignée
-2. **Supabase direct** (PostgREST, clé publique) — lecture seule, écriture des avis incluse
-3. **Jeu de démo local** — 24 commerces fictifs réalistes, si les deux sont injoignables
+1. **Supabase direct** (PostgREST, clé publique) — lecture, écriture des avis incluse (RPC `publier_avis`)
+2. **Jeu de démo local** — 24 commerces fictifs réalistes, si Supabase est injoignable
    ou si la base n'est pas encore seedée (identifié « démo » dans l'app)
 
 Le mode actif est affiché en bas de l'accueil et sur la page Compte.
+
+> **Il n'y a pas d'API — et c'est une décision, pas un chantier en attente** (18/09/2026).
+> Une API REST Node.js avait été envisagée puis écartée : l'app lit et écrit déjà
+> directement dans Supabase, une API n'ajouterait qu'un serveur à maintenir et une
+> cible de déploiement de plus.
+>
+> La branche « API d'abord » reste dans le code (`src/lib/api.ts`, gardée par `hasApi`)
+> mais **inerte** : `VITE_API_URL` doit rester **vide**. Renseignée mais injoignable,
+> elle ferait payer un aller-retour perdu à chaque chargement avant le repli Supabase —
+> exactement ce que portait `https://annuaire974-api.onrender.com` (un nom sans serveur
+> derrière, HTTP 404) avant d'être retiré.
 
 ## 🗃️ Base de données — scripts SQL
 
@@ -74,13 +84,23 @@ ou un JWT legacy.
 
 ## 📦 Déploiement
 
-Le build (`dist/`) est un site statique : Netlify, Vercel, Cloudflare Pages ou Render
-Static Site conviennent. Variables d'environnement à définir chez l'hébergeur :
+Le build (`dist/`) est un site statique, en ligne à deux endroits :
+
+| Adresse | Qui déploie |
+|---|---|
+| https://prestadeal-hue.github.io/annuaire974-web/ | `.github/workflows/deploy.yml`, à chaque push sur `main` |
+| https://tisite.re/annuaire974/ | TiSite (nginx) |
+
+⚠️ **Un `git push` sur `main` est un déploiement en production** (GitHub Pages).
+
+Netlify, Vercel ou Cloudflare Pages conviendraient aussi — il n'y a aucun code serveur à
+héberger. Variables d'environnement à définir chez l'hébergeur (et dans `.env` pour un
+build local) :
 
 ```
 VITE_SUPABASE_URL=https://rjsshcmszhxmldzucuqh.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
-VITE_API_URL=            # URL de l'API Render quand elle sera en ligne
+VITE_API_URL=            # laisser VIDE — il n'y a pas d'API (voir § Données)
 ```
 
 ## 🗺️ Prochaines étapes
@@ -88,6 +108,7 @@ VITE_API_URL=            # URL de l'API Render quand elle sera en ligne
 - [x] `rls-policies.sql` exécuté (lecture publique OK)
 - [x] Seed exécuté : 10 catégories · 24 communes · 24 commerces · 8 avis — visibles via la clé publique
 - [x] RPC `publier_avis` active (formulaire d'avis sans compte, validé côté base)
-- [ ] Pousser le repo sur GitHub + déployer le build statique (Netlify/Cloudflare Pages)
-- [ ] Connecter l'agent IA (SOUL + AGENTS) — sans Render : l'app parle à Supabase en direct
+- [x] Publié sur GitHub + en ligne (GitHub Pages et tisite.re — voir § Déploiement)
+- [x] Architecture tranchée (18/09) : **pas d'API** — l'app parle à Supabase en direct
+- [ ] Connecter l'agent IA (SOUL + AGENTS)
 - [ ] Comptes utilisateurs (auth) et favoris synchronisés
