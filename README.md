@@ -68,7 +68,7 @@ Après `rls-policies.sql`, l'app bascule automatiquement du mode démo vers les 
 ```bash
 npm install
 npm run dev        # http://localhost:5174
-npm run typecheck  # tsc --noEmit
+npm run typecheck  # 2 passes : src/ (navigateur) puis vite.config.ts (contexte Node)
 npm run build      # dist/ + sw.js + manifest
 npm run icons      # régénère les icônes PWA depuis public/logo-tisite.svg
 npm run check-secrets  # contrôle avant commit (règle inversée)

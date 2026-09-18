@@ -13,7 +13,14 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+
+    // Pas d'inclusion automatique des @types : `@types/node` est installé pour
+    // vite.config.ts, et sans ceci ses globals (process, Buffer…) deviendraient
+    // valides dans src/ — donc un `process.env` qui passe le typecheck et casse
+    // dans le navigateur. L'outillage Node a son propre tsconfig.node.json
+    // (`types: ["node"]` explicite). Ne pas retirer.
+    "types": []
   },
-  "include": ["src", "vite.config.ts", "scripts"]
+  "include": ["src"]
 }
