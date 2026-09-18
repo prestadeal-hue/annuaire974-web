@@ -73,7 +73,8 @@ Ce que la fonction garantit, côté serveur (le client n'est jamais cru) :
 | **Un plafond par IP** | 20 questions par minute, tenu dans la base (`scripts/assistant-limite.sql`) — vérifié à chaque `check-agent` |
 | **Réunion + France** | Le pays vient de Cloudflare (`cf-ipcountry`). S'il manque, on **laisse passer** et on le note : deviner fermerait la porte à La Réunion un jour où l'en-tête change de nom |
 | **Le site et l'assistant voient la même chose** | Même requête PostgREST que `src/lib/api.ts` |
-| **Pas de bouton mort** | Le widget demande une fois si la fonction existe (un `GET`, gratuit). 404 → il ne s'affiche pas |
+| **Pas de bouton mort** | Le widget demande une fois si la fonction existe (un `GET`, gratuit). 404 (pas déployée) ou 403 (hors zone) → il ne s'affiche pas |
+| **Un appel sans clé n'arrive pas** | Mesuré : la passerelle refuse un `POST` sans `apikey` ni `Authorization` (`401 UNAUTHORIZED_NO_AUTH_HEADER`) avant même la fonction. Ce n'est pas une protection — la clé publique est dans le site — mais ça écarte les balayages au hasard |
 
 **Déploiement** (aucune CLI nécessaire) :
 
