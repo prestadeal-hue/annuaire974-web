@@ -75,9 +75,22 @@ Ce que la fonction garantit, côté serveur (le client n'est jamais cru) :
 
 **Déploiement** (aucune CLI nécessaire) :
 
-1. Supabase → **Edge Functions** → *Deploy a new function* → nom : `chat`
-2. Coller `supabase/functions/chat/index.ts` en entier — *Verify JWT* **reste activé**
-3. Edge Functions → **Secrets** → `MIMO_API_KEY` = la clé `tp-…`
+1. Supabase → **Edge Functions** → *Deploy a new function* → *Via Editor* → nom : `chat`
+2. Coller `supabase/functions/chat/index.ts` en entier, puis *Deploy function*
+3. Onglet **Details** de la fonction → *Verify JWT with legacy secret* → **OFF**
+4. Edge Functions → **Secrets** → `MIMO_API_KEY` = la clé `tp-…`
+
+> ⚠️ **L'étape 3 n'est pas une préférence, c'est une obligation.** Ce projet utilise les
+> clés 2026 (`sb_publishable_…`), qui **ne sont pas des JWT**. Avec *Verify JWT* activé
+> (le défaut), la passerelle rejette chaque appel en `401 {"error":"JWT is invalid"}` —
+> confirmé par l'équipe Supabase : `--no-verify-jwt` est requis dès qu'on appelle avec une
+> clé anon (publishable) ou secret.
+>
+> La contrepartie est réelle : **l'endpoint devient public**. La clé MiMo reste protégée,
+> mais la dépense ne l'est pas — d'où les plafonds durs et la liste d'origines
+> (`ORIGINES` : tisite.re, prestadeal-hue.github.io, localhost) dans la fonction. Un vrai
+> plafond par adresse IP demanderait un état partagé, donc une table SQL : c'est le
+> prochain palier si l'abus devient un sujet.
 
 Puis, depuis un poste qui a le `.env` :
 
@@ -154,6 +167,6 @@ secret Supabase, pas une variable de build.
 - [x] Publié sur GitHub + en ligne (GitHub Pages et tisite.re — voir § Déploiement)
 - [x] Architecture tranchée (18/09) : **pas d'API** — l'app parle à Supabase en direct
 - [x] Assistant : widget + Edge Function écrits (18/09) — la clé du modèle ne sort jamais du serveur
-- [ ] Assistant : déployer la fonction dans Supabase + le secret `MIMO_API_KEY`, puis `npm run check-agent`
+- [ ] Assistant : déployer la fonction dans Supabase (*Verify JWT* sur **OFF**) + le secret `MIMO_API_KEY`, puis `npm run check-agent`
 - [ ] Assistant : écrire sa persona (`SOUL`) — aujourd'hui un prompt système sobre, dans la fonction
 - [ ] Comptes utilisateurs (auth) et favoris synchronisés

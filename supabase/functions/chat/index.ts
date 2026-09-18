@@ -21,12 +21,30 @@
      · elle ne fait jamais confiance au client : longueurs, nombre de messages et
        taille de sortie sont plafonnés ICI.
 
+   ⚠️ « VERIFY JWT » DOIT ÊTRE DÉSACTIVÉ — ET CE N'EST PAS UN CHOIX.
+
+   Ce projet utilise les clés 2026 (`sb_publishable_…`), qui ne sont PAS des JWT.
+   Avec « Verify JWT » activé (le défaut), la passerelle Supabase refuse chaque
+   appel avec `401 {"error":"JWT is invalid"}` : le test la rejette parce qu'elle
+   attend un JWT signé, et la clé publique n'en est plus un. C'est confirmé par
+   l'équipe Supabase : « il faut --no-verify-jwt si vous appelez avec une clé
+   anon (publishable) ou service_role (secret) ».
+
+   CONSÉQUENCE, ET ELLE EST RÉELLE : cet endpoint est public. La clé MiMo reste
+   protégée (personne ne peut la lire), mais la DÉPENSE ne l'est pas — qui connaît
+   l'URL peut la faire travailler. D'où, dans le code ci-dessous :
+     · des plafonds durs (messages, longueurs, jetons rendus) ;
+     · une liste d'origines : un site tiers ne peut pas s'en servir comme API.
+   Reste à faire si l'abus devient un sujet : un vrai plafond par adresse IP
+   (une table + un compteur) — c'est un état partagé, donc ça passe par SQL.
+
    DÉPLOIEMENT (sans CLI, le plus court) :
-     1. Supabase → Edge Functions → « Deploy a new function » → nom : `chat`
-     2. coller CE fichier entier — « Verify JWT » reste ACTIVÉ (le site envoie la clé
-        `anon`, qui est un JWT valide : ça suffit à filtrer les appels anonymes)
-     3. Edge Functions → Secrets → `MIMO_API_KEY` = la clé `tp-…`
-   En CLI : `supabase functions deploy chat --project-ref rjsshcmszhxmldzucuqh`
+     1. Supabase → Edge Functions → « Deploy a new function » → « Via Editor » → nom : `chat`
+     2. coller CE fichier entier, puis « Deploy function »
+     3. onglet « Details » de la fonction → « Verify JWT with legacy secret » → OFF
+     4. Edge Functions → Secrets → `MIMO_API_KEY` = la clé `tp-…`
+   En CLI, l'équivalent :
+     supabase functions deploy chat --no-verify-jwt --project-ref rjsshcmszhxmldzucuqh
 
    Vérification, après déploiement : `node scripts/check-agent.mjs`
    ══════════════════════════════════════════════════════════════════════════ */
@@ -38,6 +56,21 @@ const MIMO_API_KEY = Deno.env.get('MIMO_API_KEY') ?? ''
 /** Injectés par la plateforme Supabase dans chaque fonction — pas à les définir. */
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+/* ── Qui a le droit d'appeler ───────────────────────────────────────────────
+   L'endpoint est public (voir l'en-tête). Cette liste n'est pas une serrure —
+   une origine se falsifie avec curl — mais elle empêche un site tiers de se
+   servir de cet assistant comme d'une API gratuite à nos frais, ce qui est
+   exactement ce qui arrive à une fonction publique sans rien devant.
+   Un appel sans en-tête `Origin` (curl, `scripts/check-agent.mjs`) passe : un
+   navigateur, lui, en envoie toujours un.
+   ─────────────────────────────────────────────────────────────────────────── */
+const ORIGINES = (Deno.env.get('ORIGINES') ?? [
+  'https://tisite.re',
+  'https://prestadeal-hue.github.io',
+  'http://localhost:5174',
+  'http://localhost:4199',
+].join(',')).split(',').map((o) => o.trim()).filter(Boolean)
 
 const MAX_CARACTERES = 1500      // par message : une question, pas un roman
 const MAX_MESSAGES = 10          // l'historique envoyé par le widget
@@ -145,6 +178,12 @@ async function lireCommerces(): Promise<{ texte: string; nombre: number }> {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'méthode non autorisée' }, 405)
+
+  const origine = req.headers.get('origin')
+  if (origine && !ORIGINES.includes(origine)) {
+    console.error(`[chat] origine refusée : ${origine}`)
+    return json({ error: 'origine_refusee' }, 403)
+  }
 
   if (!MIMO_API_KEY) {
     // Le cas le plus probable au premier essai : la fonction est déployée, la clé
