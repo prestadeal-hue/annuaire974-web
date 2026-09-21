@@ -82,6 +82,22 @@ jamais directement aux services. La fonction détient, côté serveur, **deux se
 |---|---|
 | `MIMO_API_KEY` | le modèle qui rédige la réponse |
 | `EXA_API_KEY` | la **recherche en temps réel** (Exa) qui enrichit la réponse |
+| `FUSEAU` *(facultative)* | le fuseau des repères de date — `Indian/Reunion` par défaut |
+
+### La date du jour, donnée au modèle (21/09/2026)
+
+L'assistant a répondu **« demain, mercredi 16 septembre »** à une question posée le
+**lundi 21** : il n'avait aucun repère de date, donc « demain », « ce soir » et
+même les jours de la semaine sortaient de l'entraînement du modèle — c'est-à-dire
+d'un calendrier qui n'est pas le nôtre. Un numéro inventé se voit ; une date
+inventée, non.
+
+La fonction calcule donc **côté serveur** (jamais côté navigateur : une date reçue
+d'un client est manipulable, et elle ne dit rien de l'heure qu'il est sur l'île)
+les repères — aujourd'hui, hier, demain, après-demain — et les met dans le prompt
+**avant la liste des commerces**, avec une règle explicite : *une date ne s'invente
+pas*. Le fuseau est celui de La Réunion (`Indian/Reunion`, UTC+4), réglable
+par le secret `FUSEAU`.
 
 **Pourquoi pas une variable `VITE_*`** : toute variable `VITE_*` utilisée par le
 code finit dans le paquet JavaScript **public** — vérifié, la clé `anon` de
@@ -170,9 +186,11 @@ Puis, depuis un poste qui a le `.env` :
 npm run check-agent            # la fonction est-elle en ligne ? (gratuit)
 npm run check-agent -- --exa   # la recherche web est-elle branchée ? (1 question)
 npm run check-agent -- --flux  # la réponse arrive-t-elle au fil de l'eau ? (1 question)
-npm run check-agent -- --tester # 3 questions pièges + Exa + flux + plafond + pays
+npm run check-agent -- --date  # l'assistant sait-il quel jour on est ? (1 question)
+npm run check-agent -- --tester # 3 questions pièges + Exa + flux + date + plafond + pays
 npm run check-exa              # la clé Exa répond-elle en direct ? (hors Supabase)
-npm test                       # le découpage des flux (aucun réseau, aucun jeton)
+npm run check-fonction         # la Edge Function compile-t-elle ? (aucun réseau)
+npm test                       # flux + repères de date (aucun réseau, aucun jeton)
 ```
 
 ### Les contrôles, et ce que chacun prouve
@@ -181,8 +199,10 @@ npm test                       # le découpage des flux (aucun réseau, aucun je
 |---|---|
 | `npm run check-agent -- --exa` | que la **fonction déployée** utilise Exa : elle s'auto-décrit au `GET` (clé posée ou non), puis une question web doit rendre `web > 0` (le nombre de résultats Exa qui l'ont nourrie) |
 | `npm run check-agent -- --flux` | que la fonction déployée **streame** : le `GET` annonce `flux: "pret"`, puis une vraie question doit rendre **plusieurs** morceaux. Un seul morceau de 800 caractères, c'est la réponse d'un bloc — le contrôle le dit au lieu de le cacher |
+| `npm run check-agent -- --date` | que l'assistant **sait quel jour on est** : le `GET` publie la date du serveur, comparée à celle du contrôle dans le même fuseau ; puis la question qui a mal tourné le 21/09/2026 (« on est quel jour aujourd'hui ? ») doit rendre le bon jour **et** le bon mois |
 | `npm run check-exa` | que la **clé Exa elle-même** est vivante, en direct, sans Supabase — utilisable par un agent (ou agent-reach) avant de compter sur la recherche temps réel |
-| `npm test` | que le **lecteur de flux** encaisse les découpages traîtres : événement coupé en deux paquets, deux événements collés, accent à cheval sur deux paquets, ligne illisible, fin sans retour à la ligne, abandon en cours de route |
+| `npm run check-fonction` | que la **Edge Function compile** (TypeScript strict, avec un `Deno` minimal fabriqué pour l'occasion) : `npm run typecheck` ne regarde que `src/`, et c'est ce fichier-là qu'on colle à la main dans Supabase |
+| `npm test` | que le **lecteur de flux** encaisse les découpages traîtres (paquet coupé en deux, deux événements collés, accent à cheval, fin sans retour à la ligne…), et que les **repères de date** tiennent le fuseau de l'île, la bascule de mois et celle d'année |
 
 ## 🗃️ Base de données
 
@@ -248,4 +268,5 @@ Supabase, pas des variables de build.
 - [x] Ménage : code mort des pages retirées enlevé (CSS 1 132 → 654 lignes, 35 icônes → 4)
 - [x] SEO : canonique, Open Graph + `og-image.png`, JSON-LD, contenu lisible sans JS, sitemap
 - [x] Icônes PWA : passées de l'ancien logo violet à la marque TiSite (846 Ko → 180 Ko)
+- [x] Dates : l'assistant reçoit la date et l'heure de La Réunion (il annonçait « demain, mercredi 16 septembre » un lundi 21) — contrôles `check-agent --date`, `npm test`, `check-fonction`
 - [ ] Comptes utilisateurs (auth), si un jour le chat doit mémoriser les préférences

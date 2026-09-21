@@ -19,14 +19,35 @@
 //   node scripts/check-agent.mjs            → la fonction est-elle en ligne ? (gratuit)
 //   node scripts/check-agent.mjs --exa      → la recherche web (Exa) est-elle branchée ?
 //   node scripts/check-agent.mjs --flux     → la réponse arrive-t-elle au fil de l'eau ?
+//   node scripts/check-agent.mjs --date     → la date du jour est-elle juste ? (1 question)
 //   node scripts/check-agent.mjs --tester   → les 3 questions (consomme le modèle),
-//                                             puis Exa, le flux, le plafond et le pays
+//                                             puis Exa, le flux, la date, le plafond
+//                                             et le pays
 
 import { readFileSync } from 'node:fs'
 
 const ARG_TESTER = process.argv.includes('--tester')
 const ARG_EXA = process.argv.includes('--exa')
 const ARG_FLUX = process.argv.includes('--flux')
+const ARG_DATE = process.argv.includes('--date')
+
+// Le fuseau de l'assistant — le même que celui de la fonction par défaut. Sert
+// à calculer la date attendue CÔTÉ CONTRÔLE, sans rien demander au serveur :
+// comparer deux fois la même source ne prouverait rien.
+const FUSEAU = process.env.FUSEAU ?? 'Indian/Reunion'
+
+const dateAttendue = (maintenant = new Date()) => {
+  const parties = new Intl.DateTimeFormat('en-GB', {
+    timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(maintenant)
+  const prendre = (type) => parties.find((p) => p.type === type)?.value ?? ''
+  return {
+    iso: `${prendre('year')}-${prendre('month')}-${prendre('day')}`,
+    long: new Intl.DateTimeFormat('fr-FR', {
+      timeZone: FUSEAU, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    }).format(maintenant),
+  }
+}
 
 /* ── La configuration, lue comme Vite la lit ─────────────────────────────── */
 function lireEnv() {
@@ -88,18 +109,20 @@ if (config && typeof config === 'object' && 'exa' in config) {
   console.log(`   ⓘ elle se décrit : modèle « ${config.modele ?? '?'} » · Exa « ${config.exa ?? '?'} »`)
 }
 
-if (!ARG_TESTER && !ARG_EXA && !ARG_FLUX) {
+if (!ARG_TESTER && !ARG_EXA && !ARG_FLUX && !ARG_DATE) {
   console.log('\nℹ️  Rien d\'autre testé (gratuit). Pour aller plus loin :')
   console.log('    node scripts/check-agent.mjs --exa     (la recherche web est-elle branchée ?)')
   console.log('    node scripts/check-agent.mjs --flux    (la réponse arrive-t-elle au fil de l\'eau ?)')
+  console.log('    node scripts/check-agent.mjs --date    (la date du jour est-elle juste ?)')
   console.log('    node scripts/check-agent.mjs --tester  (les 3 questions pièges)')
   process.exit(echecs > 0 ? 1 : 0)
 }
 
-// `--exa` / `--flux` : on ne paie que la ou les questions demandées, rien d'autre.
+// `--exa` / `--flux` / `--date` : on ne paie que la ou les questions demandées.
 if (!ARG_TESTER) {
   if (ARG_EXA) await verifierExa()
   if (ARG_FLUX) await verifierFlux()
+  if (ARG_DATE) await verifierDate()
   console.log(`\n${echecs === 0 ? '✅ Conforme.' : `❌ ${echecs} problème(s).`}`)
   process.exit(echecs === 0 ? 0 : 1)
 }
@@ -228,6 +251,72 @@ async function verifierFlux() {
     return
   }
   ok(`${morceaux} morceaux, premier après ${premier} ms, réponse complète en ${Date.now() - debut} ms`)
+}
+
+/* ── La date du jour, prouvée et non supposée ────────────────────────────
+   Deux preuves, une gratuite et une payante :
+     1. le GET publie la date telle que le SERVEUR la voit — on la compare à
+        celle qu'on calcule ici, dans le même fuseau. Une fonction ancienne ne
+        publie rien : elle le dit, au lieu de faire semblant.
+     2. une vraie question : « on est quel jour aujourd'hui ? » doit rendre le
+        bon jour ET le bon mois. C'est la question qui a mal tourné le
+        21/09/2026 (« demain, mercredi 16 septembre », dit un lundi 21) :
+        c'est donc elle qu'on repose.
+   Sans `--date`, tout ceci est gratuit et ne consomme pas le modèle.
+   ─────────────────────────────────────────────────────────────────────── */
+async function verifierDate() {
+  console.log('\n── « la date du jour »')
+
+  const attendue = dateAttendue()
+  console.log(`   ⓘ côté contrôle : ${attendue.long} (${attendue.iso}, fuseau ${FUSEAU})`)
+
+  if (config && typeof config.date === 'string') {
+    if (config.date === attendue.iso) {
+      ok(`le serveur annonce la même date que nous (${config.date}, ${config.heure ?? '?'} à La Réunion)`)
+    } else {
+      ko(`le serveur annonce ${config.date} et nous ${attendue.iso} — fuseau à vérifier (secret FUSEAU)`)
+    }
+  } else {
+    console.log("   ⓘ la fonction déployée ne publie pas de date (version antérieure) — on teste par la question.")
+  }
+
+  const question = "On est quel jour aujourd'hui ? Réponds en une phrase, sans détailler."
+  console.log(`   → ${question}`)
+  let corps
+  try {
+    const r = await fetch(AGENT, {
+      method: 'POST',
+      headers: { ...entetes, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: question }] }),
+    })
+    if (!r.ok) {
+      ko(`HTTP ${r.status} — voir les journaux de la fonction`)
+      return
+    }
+    corps = await r.json()
+  } catch (err) {
+    ko(`réseau : ${err.message}`)
+    return
+  }
+
+  const reponse = (corps.reply ?? '').trim()
+  if (!reponse) {
+    ko('réponse vide')
+    return
+  }
+  console.log(`   ⓘ réponse : ${reponse.slice(0, 160)}`)
+
+  // Le jour du mois ET le mois, parce qu'un « 21 » tout seul peut venir d'une
+  // phrase sur autre chose. Le nom du mois, lui, ne s'invente pas par hasard.
+  const [, jour, mois] = attendue.long.split(' ')
+  const aLeJour = new RegExp(`(^|[^0-9])${jour}([^0-9]|$)`).test(reponse)
+  const aLeMois = reponse.toLowerCase().includes((mois ?? '').toLowerCase())
+  if (aLeJour && aLeMois) ok(`la réponse donne bien le ${jour} ${mois}`)
+  else {
+    ko(`la réponse ne donne pas la date du jour — il fallait « ${attendue.long} »,`)
+    console.log('     → c\'est l\'usage : les repères de date partent avec le prompt. Si la')
+    console.log('       fonction en ligne est ancienne, recoller supabase/functions/chat/index.ts.')
+  }
 }
 
 /* ── La vérité terrain : ce que l'annuaire contient vraiment ─────────────── */
@@ -398,6 +487,10 @@ for (const q of QUESTIONS) {
 
 await verifierExa()
 await verifierFlux()
+// La date : mesurée le 21/09/2026 (« demain, mercredi 16 septembre », dit un
+// lundi 21). Elle fait partie de la batterie complète — c'est le genre de défaut
+// qui se reproduit tout seul si personne ne repose la question.
+await verifierDate()
 await verifierPlafond()
 await verifierPays()
 

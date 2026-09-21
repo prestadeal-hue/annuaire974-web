@@ -17,6 +17,9 @@
      · elle lit les commerces (côté serveur) et les donne au modèle dans son prompt
        — c'est ce qui rend l'invention d'un commerce impossible plutôt que
        déconseillée : ce que l'assistant ne trouve pas dans la liste, il ne l'a pas ;
+     · elle donne la DATE DU JOUR et l'heure de La Réunion (21/09/2026) : sans ce
+       repère, le modèle situe « demain » et « mercredi » d'après son entraînement
+       — vécu : « demain, mercredi 16 septembre » dit un lundi 21 ;
      · elle appelle MiMo (`mimo-v2.5`) et rend sa réponse ;
      · elle ne fait jamais confiance au client : longueurs, nombre de messages et
        taille de sortie sont plafonnés ICI.
@@ -153,6 +156,45 @@ const MAX_MESSAGES = 10          // l'historique envoyé par le widget
 const MAX_SORTIE = 700           // jetons rendus : une réponse, pas une page
 const LIMITE_COMMERCES = 300     // l'annuaire entier tient dans le prompt, pour l'instant
 const CACHE_SECONDES = 60        // la liste change rarement : inutile de la relire à chaque mot
+
+/* ── La date et l'heure, calculées ICI ───────────────────────────────────────
+   Mesuré le 21/09/2026 : à une question sur les 30 ans de Pokémon, l'assistant a
+   répondu « demain, mercredi 16 septembre » — alors qu'on était le lundi 21. Il
+   n'avait AUCUN repère de date : sans lui, « demain », « ce soir », « mercredi »
+   sortent de l'entraînement du modèle, c'est-à-dire d'un calendrier qui n'est pas
+   le nôtre. Ce n'est pas une maladresse, c'est une invention — et la règle « tu
+   n'inventes jamais » ne l'attrapait pas, parce qu'elle ne parle que des commerces,
+   des numéros et des horaires.
+
+   La date vient de l'horloge du SERVEUR, jamais du navigateur : une date reçue d'un
+   client est manipulable, et elle ne dit rien de l'heure qu'il est à La Réunion. Le
+   fuseau est réglable (`FUSEAU`), l'heure de l'île par défaut.
+   ────────────────────────────────────────────────────────────────────────── */
+const FUSEAU = Deno.env.get('FUSEAU') ?? 'Indian/Reunion'
+
+const REPERES_DATE = (maintenant = new Date()) => {
+  const quand = (jours: number) => new Date(maintenant.getTime() + jours * 86_400_000)
+  const format = (options: Intl.DateTimeFormatOptions, jours = 0) =>
+    new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, ...options }).format(quand(jours))
+  const long: Intl.DateTimeFormatOptions = {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  }
+  // La forme machine (2026-09-21), lisible par un contrôle — jamais affichée au
+  // visiteur. Construite à la main plutôt qu'avec une locale : « fr-CA » rend
+  // bien `AAAA-MM-JJ` aujourd'hui, mais c'est une locale qu'on peut changer.
+  const parties = new Intl.DateTimeFormat('en-GB', {
+    timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(maintenant)
+  const prendre = (type: string) => parties.find((p) => p.type === type)?.value ?? ''
+  return {
+    aujourdhui: format(long),
+    hier: format(long, -1),
+    demain: format(long, 1),
+    apresDemain: format(long, 2),
+    heure: format({ hour: '2-digit', minute: '2-digit' }),
+    iso: `${prendre('year')}-${prendre('month')}-${prendre('day')}`,
+  }
+}
 
 /* ── La persona ──────────────────────────────────────────────────────────────
    Elle vit dans le fichier de la fonction, et pas dans un fichier séparé, pour une
@@ -475,6 +517,11 @@ Deno.serve(async (req) => {
     }, 403)
   }
 
+  // Une seule lecture de l'horloge pour tout l'appel : le GET la publie, le prompt
+  // s'en sert. Lu une seule fois, il ne peut pas se contredire d'un bout à l'autre
+  // de la requête (une requête peut chevaucher minuit).
+  const reperes = REPERES_DATE()
+
   // Un GET ne fait rien et ne paie rien. Il sert au widget (« la fonction existe ? »,
   // pas de bouton mort) ET au contrôle `check-agent` : il dit si les deux clés sont
   // posées. On ne révèle jamais une clé — juste « prête » ou « absente ».
@@ -483,6 +530,12 @@ Deno.serve(async (req) => {
       ok: true,
       modele: MIMO_API_KEY ? 'pret' : 'absent',
       exa: EXA_API_KEY ? 'pret' : 'absent',
+      // `date` dit DEUX choses d'un coup : c'est la version du code déployé (celle
+      // qui connaît les repères de date), et c'est l'heure qu'il est à La Réunion
+      // d'après le serveur. `check-agent --date` compare cette valeur à la sienne —
+      // une fonction encore ancienne ne l'annonce pas.
+      date: reperes.iso,
+      heure: reperes.heure,
       // `flux` dit la VERSION du code déployé : cette fonction sait rendre la
       // réponse au fil de l'eau. Absent de la réponse = une version antérieure
       // est encore en ligne, et il faut recoller ce fichier.
@@ -544,6 +597,13 @@ Deno.serve(async (req) => {
 
   const systemes = [
     { role: 'system', content: PERSONA },
+    // Les repères de date passent AVANT la liste des commerces : ils ne pèsent
+    // rien, ils ne changent qu'une fois par minute, et sans eux le modèle invente
+    // (vécu le 21/09/2026 : « demain, mercredi 16 septembre »).
+    {
+      role: 'system',
+      content: `RÉPÈRES DE DATE — ils viennent de l'horloge, ils sont JUSTES.\nAujourd'hui, c'est le ${reperes.aujourdhui} (${reperes.iso}). Il est ${reperes.heure} à La Réunion.\nHier, c'était le ${reperes.hier}.\nDemain, c'est le ${reperes.demain}.\nAprès-demain, c'est le ${reperes.apresDemain}.\n\n- « aujourd'hui », « ce soir », « demain », « hier », « cette semaine » se rapportent à CES dates-là, jamais à une autre.\n- Tu ne récites pas ces repères sans raison — mais si on te demande quel jour on est, tu réponds juste.\n- UNE DATE NE S'INVENTE PAS, pas plus qu'un numéro ou un horaire. Si un jour précis ne vient ni de ces repères, ni d'un résultat web ci-dessous, ni de la personne, tu ne le fabriques pas : tu dis ce que tu sais de l'événement (un anniversaire, une promo, une ouverture, un festival) sans lui coller une date de ton cru, et tu invites à vérifier auprès de l'organisateur ou du commerce.`,
+    },
     { role: 'system', content: `COMMERCES ET PRESTATAIRES DE LA RÉUNION (${nombre})\n${texte}` },
   ]
   if (web) {

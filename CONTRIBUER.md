@@ -126,10 +126,15 @@ qui vit dans ce fichier de code au lieu des secrets serait **publiée** — ce
 dépôt est public. Sans `EXA_API_KEY`, l'assistant répond quand même, sans web.
 
 De même, `npm run check-agent` interroge la fonction **réellement déployée** :
-c'est le seul contrôle qui dit si les deux sont d'accord. `npm run check-agent -- --flux`
-le dit pour la réponse au fil de l'eau : s'il répond « la fonction répond d'un bloc »,
-la fonction en ligne est une version antérieure — recoller `index.ts` dans Supabase
-(le site, lui, continue de fonctionner sans le flux).
+c'est le seul contrôle qui dit si les deux sont d'accord. `--date` vérifie la date
+du jour (celle qui a annoncé « mercredi 16 septembre » un lundi 21) et `--flux` la
+réponse au fil de l'eau : s'il répond « la fonction répond d'un bloc », la fonction
+en ligne est une version antérieure — recoller `index.ts` dans Supabase (le site,
+lui, continue de fonctionner sans le flux).
+
+Et avant de coller la fonction dans Supabase, `npm run check-fonction` : c'est le
+seul fichier du projet que `npm run typecheck` ne regarde pas (il utilise les
+globales Deno), et c'est celui dont la copie en service est **manuelle**.
 
 Avant de pousser, `npm test` : le découpage des flux a ses tests parce que c'est la
 partie qui casse en silence — un morceau coupé en deux par le réseau et le visiteur
@@ -154,8 +159,10 @@ poussée en production. Trois cas où l'on demande *avant* de pousser :
 | `CONTRIBUER.md` | **ce fichier** : les règles git et la boucle de travail — la seule source |
 | `README.md` | l'état du produit : fonctions, charte, déploiement, secrets |
 | `scripts/check-secrets.mjs` | ce qui est poussé ne doit contenir aucun secret |
-| `scripts/check-agent.mjs` | l'assistant **en ligne** : numéros réels, aucun commerce inventé, plafond actif, réponse streamée (`--flux`) |
+| `scripts/check-agent.mjs` | l'assistant **en ligne** : numéros réels, aucun commerce inventé, plafond actif, réponse streamée (`--flux`), date du jour juste (`--date`) |
+| `scripts/check-fonction.mjs` | la **Edge Function compile** (TypeScript strict + `Deno` minimal) — `npm run check-fonction` : `npm run typecheck` ne regarde que `src/`, et ce fichier-là est celui qu'on colle à la main dans Supabase |
 | `src/lib/flux.ts` + `scripts/test-flux.mjs` | le lecteur de flux SSE, **hors React** pour être testable — `npm test` |
+| `scripts/test-date.mjs` | les **repères de date** de la fonction (fuseau de l'île, bascules de mois et d'année) — le code est extrait de la fonction, pas recopié |
 | `scripts/assistant-limite.sql` | la table du plafond par IP (déjà créée côté Supabase) |
 | `scripts/generate-icons.mjs` + `scripts/generate-og.mjs` | les images : icônes PWA (marque TiSite) et `og-image.png` — `npm run icons` / `npm run og` |
 | `.github/workflows/deploy.yml` | typecheck + secrets → build → Pages |
