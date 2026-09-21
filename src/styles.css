@@ -81,6 +81,9 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 
   --container: 1100px;
+  /* Hauteur du header sticky (min-height de .site-header .bar) : sert à calculer
+     la hauteur du chat pour que la barre de saisie colle au bas de l'écran. */
+  --header-h: 78px;
 
   /* Barre d'onglets mobile + zones sûres iOS */
   --tabbar-h: 62px;
@@ -178,15 +181,17 @@ h1, h2, h3, h4 {
 
 .app-main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: var(--container);
   margin: 0 auto;
-  padding: var(--space-5) var(--space-5) var(--space-8);
+  padding: var(--space-5) var(--space-5) var(--space-3);
 }
 
 /* Plus de barre d'onglets : la page est le chat, on respire. */
 @media (max-width: 899px) {
-  .app-main { padding: var(--space-4) var(--space-4) var(--space-7); }
+  .app-main { padding: var(--space-4) var(--space-4) var(--space-2); }
 }
 
 /* ── Header — identique à tisite.re ───────────────────────────────── */
@@ -902,22 +907,26 @@ h1, h2, h3, h4 {
   border-bottom-left-radius: 6px;
 }
 .agent-points span {
-  width: 7px; height: 7px;
+  width: 8px; height: 8px;
   border-radius: var(--radius-pill);
   background: var(--color-primary-500);
-  opacity: .25;
-  transform: scale(.7);
-  transform-origin: center;
-  /* Pulsation douce : AUCUN déplacement vertical — donc aucun « saut » de la bulle. */
-  animation: point-dance 1.4s ease-in-out infinite;
+  opacity: .3;
+  animation: point-dance 1.2s var(--ease) infinite;
 }
 .agent-points span:nth-child(1) { animation-delay: 0s; }
-.agent-points span:nth-child(2) { animation-delay: .18s; }
-.agent-points span:nth-child(3) { animation-delay: .36s; }
+.agent-points span:nth-child(2) { animation-delay: .15s; }
+.agent-points span:nth-child(3) { animation-delay: .3s; }
 @keyframes point-dance {
   0%,
-  100% { opacity: .25; transform: scale(.7); }
-  50% { opacity: 1; transform: scale(1); }
+  60%,
+  100% { opacity: .3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
+/* Pulsation d'opacité seule : sert de repli quand le mouvement est réduit. */
+@keyframes point-fade {
+  0%,
+  100% { opacity: .3; }
+  50% { opacity: 1; }
 }
 
 /* ── Icône bouton générique ───────────────────────────────────────── */
@@ -937,30 +946,42 @@ h1, h2, h3, h4 {
 .icon-btn:active { transform: scale(.92); }
 
 /* ═══════════════════════════════════════════════════════════════════
-   LE CHAT — tout le site. Grande zone de saisie au centre, réponses en
-   dessous, aux couleurs TiSite (émeraude profond + or).
+   LE CHAT — tout le site, en mise en page « ChatGPT » : le fil défile,
+   la zone de saisie reste COLLÉE EN BAS. Couleurs TiSite (émeraude + or).
    ═══════════════════════════════════════════════════════════════════ */
 
 .chat {
+  display: flex;
+  flex-direction: column;
+  flex: none;
   width: 100%;
   max-width: 820px;
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
+  /* Remplit la fenêtre sous le header : le fil scrolle, la barre reste en bas. */
+  height: calc(100dvh - var(--header-h) - var(--space-5) - var(--space-3));
 }
 
-.chat-hero {
+.chat-fil {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2) 2px var(--space-3);
+}
+
+/* À vide, l'accueil se pose au milieu de la zone — le composer attend en bas. */
+.chat-fil.vide { justify-content: center; }
+
+.chat-accueil {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: var(--space-3);
   text-align: center;
-  padding-top: var(--space-4);
-}
-
-/* À vide, le bloc d'accueil se pose au milieu de la page — comme ChatGPT. */
-.chat-vide .chat-hero {
-  min-height: min(62vh, 540px);
-  justify-content: center;
+  padding: var(--space-4) 0;
 }
 
 .chat-titre {
@@ -969,17 +990,14 @@ h1, h2, h3, h4 {
   line-height: 1.22;
   letter-spacing: -0.02em;
   max-width: 34ch;
-  margin-top: var(--space-2);
 }
 
-/* La grande zone de saisie, au centre. */
+/* La grande zone de saisie, collée en bas. */
 .chat-composer {
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
   width: 100%;
-  max-width: 720px;
-  margin: var(--space-6) auto 0;
   padding: 8px 8px 8px 16px;
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -1027,22 +1045,15 @@ h1, h2, h3, h4 {
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-2);
-  margin-top: var(--space-5);
+  margin-top: var(--space-2);
 }
 
-.chat-note { margin-top: var(--space-4); color: var(--color-text-muted); font-size: 14px; }
+.chat-note { color: var(--color-text-muted); font-size: 14px; }
 
-/* Le fil de la conversation — sous la zone de saisie. */
-.chat-fil {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-6);
-  padding-bottom: var(--space-4);
+@media (max-width: 899px) {
+  .chat { height: calc(100dvh - var(--header-h) - var(--space-4) - var(--space-2)); }
 }
-
 @media (max-width: 600px) {
-  .chat-vide .chat-hero { min-height: min(56vh, 460px); }
   .chat-composer { padding-left: 12px; }
   .chat-titre { max-width: 100%; }
 }
@@ -1065,6 +1076,12 @@ h1, h2, h3, h4 {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
-  /* Les points restent lisibles mais immobiles quand on réduit les animations. */
-  .agent-points span { opacity: .7; transform: none; }
+  /* Les points gardent une PULSATION D'OPACITÉ (aucun mouvement) : figés, ils
+     laissent croire que l'assistant est bloqué — c'est exactement le bug vu. */
+  .agent-points span {
+    animation-name: point-fade !important;
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+    transform: none !important;
+  }
 }

@@ -6,15 +6,15 @@ import { IconSend, IconSparkles } from './Icons'
 /**
  * Le chat d'Annuaire 974 — désormais TOUT le site.
  *
+ * Mise en page « ChatGPT » : le fil occupe la hauteur disponible et défile tout
+ * seul, la zone de saisie reste COLLÉE EN BAS. À l'ouverture, l'accueil est
+ * centré ; dès le premier message, la conversation prend la place.
+ *
  * Il ne connaît AUCUNE clé : il appelle une Edge Function Supabase
  * (`supabase/functions/chat/`), qui garde côté serveur la clé du modèle (MiMo)
  * ET la clé de recherche (Exa). C'est la seule raison d'exister de cette
  * fonction : toute variable `VITE_*` utilisée par le code se retrouve dans le
  * paquet JavaScript public — une clé de modèle ou de recherche, elle, se paie.
- *
- * L'assistant répond en s'appuyant sur deux sources côté serveur :
- *   · la liste réelle des commerces (Supabase) — ce qu'il ne trouve pas, il ne l'a pas ;
- *   · des résultats web en temps réel (Exa) — actualités, horaires, avis récents.
  */
 
 type Message = { role: 'user' | 'assistant'; content: string }
@@ -108,7 +108,7 @@ function Rendu({ texte }: { texte: string }) {
    contrôle CORS préalable, et quand la fonction n'existe pas ce contrôle échoue
    — le navigateur lève une erreur réseau au lieu de rendre le 404. Sans en-tête,
    la requête est « simple » : le 404 arrive lisible. Déployée, la fonction répond
-   401 (il manque l'en-tête) — et 401 = « là ».
+   soit 200 (version récente, qui se décrit), soit 401/405 — tout ça veut dire « là ».
 
    Deux réponses veulent dire « elle ne me servira pas » : 404 (pas déployée) et
    403 (déployée mais refuse ce visiteur — hors Réunion / France). Le GET part
@@ -136,7 +136,7 @@ export function Chat() {
   const [enCours, setEnCours] = useState(false)
   const [souci, setSouci] = useState<string | null>(null)
   const champ = useRef<HTMLTextAreaElement>(null)
-  const fin = useRef<HTMLDivElement>(null)
+  const fil = useRef<HTMLDivElement>(null)
 
   const vide = messages.length === 0
   const indisponible = !hasAgent || dispo === 'absente'
@@ -151,9 +151,10 @@ export function Chat() {
 
   /* À l'arrivée d'un message, on suit la conversation vers le bas. */
   useEffect(() => {
-    if (vide) return
-    fin.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [messages, enCours, vide])
+    const f = fil.current
+    if (!f) return
+    f.scrollTo({ top: f.scrollHeight, behavior: 'smooth' })
+  }, [messages, enCours, souci])
 
   async function envoyer(texte: string) {
     const question = texte.trim()
@@ -203,79 +204,77 @@ export function Chat() {
   }
 
   return (
-    <div className={vide ? 'chat chat-vide fade-in' : 'chat fade-in'}>
-      <section className="chat-hero">
-        <span className="kicker">Assistant Annuaire 974</span>
-        <h1 className="chat-titre">{ACCUEIL}</h1>
-
-        <form
-          className="chat-composer"
-          onSubmit={(e) => { e.preventDefault(); void envoyer(saisie) }}
-        >
-          <span className="chat-composer-ico" aria-hidden>
-            <IconSparkles size={20} />
-          </span>
-          <textarea
-            ref={champ}
-            value={saisie}
-            onChange={(e) => setSaisie(e.target.value)}
-            onKeyDown={surTouche}
-            placeholder="Écris ta question… un resto, un artisan, un conseil sur l'île"
-            aria-label="Ta question à l'assistant"
-            rows={1}
-            maxLength={1500}
-            disabled={indisponible}
-          />
-          <button
-            className="btn btn-gold chat-envoyer"
-            type="submit"
-            disabled={enCours || indisponible || saisie.trim().length === 0}
-            aria-label="Envoyer"
-          >
-            <IconSend size={18} />
-          </button>
-        </form>
-
-        {vide && !indisponible && (
-          <div className="chat-exemples">
-            {EXEMPLES.map((ex) => (
-              <button key={ex} type="button" className="chip" onClick={() => void envoyer(ex)}>
-                {ex}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {indisponible && (
-          <p className="chat-note" role="status">
-            L'assistant n'est pas joignable pour le moment. Reviens dans un petit moment.
-          </p>
-        )}
-      </section>
-
-      {!vide && (
-        <div className="chat-fil" aria-live="polite">
-          {messages.map((m, i) =>
-            m.role === 'user' ? (
-              <p key={i} className="agent-moi">{m.content}</p>
+    <div className="chat">
+      <div className={vide ? 'chat-fil vide' : 'chat-fil'} ref={fil} aria-live="polite">
+        {vide ? (
+          <div className="chat-accueil">
+            <span className="kicker">Assistant Annuaire 974</span>
+            <h1 className="chat-titre">{ACCUEIL}</h1>
+            {indisponible ? (
+              <p className="chat-note" role="status">
+                L'assistant n'est pas joignable pour le moment. Reviens dans un petit moment.
+              </p>
             ) : (
-              <div key={i} className="agent-lui">
-                <Rendu texte={m.content} />
+              <div className="chat-exemples">
+                {EXEMPLES.map((ex) => (
+                  <button key={ex} type="button" className="chip" onClick={() => void envoyer(ex)}>
+                    {ex}
+                  </button>
+                ))}
               </div>
-            ),
-          )}
+            )}
+          </div>
+        ) : (
+          <>
+            {messages.map((m, i) =>
+              m.role === 'user' ? (
+                <p key={i} className="agent-moi">{m.content}</p>
+              ) : (
+                <div key={i} className="agent-lui">
+                  <Rendu texte={m.content} />
+                </div>
+              ),
+            )}
 
-          {enCours && (
-            <span className="agent-points" role="status" aria-label="L'assistant écrit">
-              <span />
-              <span />
-              <span />
-            </span>
-          )}
-          {souci && <p className="agent-note" role="status">{souci}</p>}
-          <div ref={fin} />
-        </div>
-      )}
+            {enCours && (
+              <span className="agent-points" role="status" aria-label="L'assistant écrit">
+                <span />
+                <span />
+                <span />
+              </span>
+            )}
+            {souci && <p className="agent-note" role="status">{souci}</p>}
+          </>
+        )}
+      </div>
+
+      <form
+        className="chat-composer"
+        onSubmit={(e) => { e.preventDefault(); void envoyer(saisie) }}
+      >
+        <span className="chat-composer-ico" aria-hidden>
+          <IconSparkles size={20} />
+        </span>
+        <textarea
+          ref={champ}
+          value={saisie}
+          onChange={(e) => setSaisie(e.target.value)}
+          onKeyDown={surTouche}
+          placeholder="Écris ta question… un resto, un artisan, un conseil sur l'île"
+          aria-label="Ta question à l'assistant"
+          rows={1}
+          maxLength={1500}
+          disabled={indisponible}
+        />
+        <button
+          className="btn btn-gold chat-envoyer"
+          type="submit"
+          disabled={enCours || indisponible || saisie.trim().length === 0}
+          aria-label="Envoyer"
+        >
+          <IconSend size={18} />
+        </button>
+      </form>
     </div>
   )
 }
