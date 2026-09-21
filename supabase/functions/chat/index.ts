@@ -388,13 +388,30 @@ async function chercherWeb(question: string): Promise<string> {
     return ''
   }
 
-  type Résultat = { title?: string; url?: string; text?: string }
+  type Résultat = { title?: string; url?: string; text?: string; publishedDate?: string }
   const data = await reponse.json() as { results?: Résultat[] }
+
+  // La date de publication, quand Exa la donne — et elle la donne (vérifié le
+  // 21/09/2026 : `publishedDate` arrive sans qu'on le demande). Sans elle, le
+  // modèle devine QUAND l'article a été écrit et remet au présent une actualité
+  // passée : « la ruée, c'est demain » pour une sortie de la semaine dernière
+  // (vécu sur les 30 ans de Pokémon, l'extension sortie le 16-17/09).
+  const jourPublication = (brut?: string) => {
+    const jour = (brut ?? '').slice(0, 10)
+    return /^\d{4}-\d{2}-\d{2}$/.test(jour) ? jour : ''
+  }
+
   const texte = (data.results ?? [])
     .filter((r) => (r.url ?? '').length > 0)
     .map((r) => {
       const extrait = (r.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 500)
-      return `- ${[r.title, r.url, extrait].filter(Boolean).join(' | ')}`
+      const quand = jourPublication(r.publishedDate)
+      return `- ${[
+        quand ? `publié le ${quand}` : '',
+        r.title,
+        r.url,
+        extrait,
+      ].filter(Boolean).join(' | ')}`
     })
     .join('\n')
 
@@ -609,7 +626,7 @@ Deno.serve(async (req) => {
   if (web) {
     systemes.push({
       role: 'system',
-      content: `RÉSULTATS WEB EN TEMPS RÉEL (source : Exa — à recouper, à citer si utile)\n${web}\n\nCes résultats peuvent être plus récents, mais aussi approximatifs. Recoupe-les avec les commerces dont tu disposes ; pour les horaires, tarifs et disponibilités, renvoie vers le téléphone. Ne parle jamais d'annuaire, de base ni de liste.`,
+      content: `RÉSULTATS WEB EN TEMPS RÉEL (source : Exa — à recouper, à citer si utile)\nPlusieurs commencent par « publié le AAAA-MM-JJ » : c'est la date de l'article.\n${web}\n\nCes résultats peuvent être plus récents, mais aussi approximatifs. Recoupe-les avec les commerces dont tu disposes ; pour les horaires, tarifs et disponibilités, renvoie vers le téléphone.\nQuand un résultat porte une date de publication, situe-la par rapport à la date du jour (ci-dessus) : ne présente JAMAIS comme à venir ce qui est déjà passé, ni l'inverse — et si l'information est un peu ancienne, dis-le. Ne parle jamais d'annuaire, de base ni de liste.`,
     })
   }
 

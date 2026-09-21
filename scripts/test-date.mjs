@@ -134,3 +134,16 @@ test('la règle « une date ne s’invente pas » est écrite noir sur blanc', (
 test('le GET publie la date (c’est ce que compare check-agent)', () => {
   assert.match(source, /date: reperes\.iso/)
 })
+
+test('les résultats web portent leur date de publication', () => {
+  // Sans elle, le modèle devine QUAND l'article a été écrit et remet au présent
+  // une actualité passée : « la ruée, c'est demain » pour une sortie de la
+  // semaine dernière (30 ans de Pokémon, extension sortie le 16-17/09).
+  assert.match(source, /publishedDate/)
+  assert.match(source, /publié le \$\{quand\}/)
+  assert.match(source, /jourPublication\(r\.publishedDate\)/)
+})
+
+test('le prompt interdit de remettre au futur ce qui est passé', () => {
+  assert.match(source, /ne présente JAMAIS comme à venir ce qui est déjà passé/)
+})
