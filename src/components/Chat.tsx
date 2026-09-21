@@ -272,9 +272,19 @@ export function Chat() {
         )}
       </div>
 
+      {/* Cliquer n'importe où dans la barre — l'icône, la marge — place le
+          curseur DANS le champ. La barre est le champ : il ne s'en ouvre pas
+          un second, et le clic ne change rien d'autre à l'écran. */}
       <form
         className="chat-composer"
         onSubmit={(e) => { e.preventDefault(); void envoyer(saisie) }}
+        onMouseDown={(e) => {
+          const cible = e.target as HTMLElement
+          if (cible === e.currentTarget || cible.closest('.chat-composer-ico')) {
+            e.preventDefault()
+            champ.current?.focus()
+          }
+        }}
       >
         <span className="chat-composer-ico" aria-hidden>
           <IconSparkles size={20} />

@@ -18,7 +18,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Annuaire974" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- PAS de <link rel="manifest"> ici : le plugin PWA l'injecte avec la base
+         du projet (/annuaire974/). Un lien écrit à la main en dur pointait sur
+         /manifest.webmanifest, c'est-à-dire le manifeste du site tisite.re lui-
+         même — un visiteur qui « installe » l'appareil ouvrait alors tisite.re. -->
     <title>Annuaire 974 — L'assistant des commerces de La Réunion</title>
   </head>
   <body>

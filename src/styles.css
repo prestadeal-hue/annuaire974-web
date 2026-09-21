@@ -1027,8 +1027,12 @@ h1, h2, h3, h4 {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
+  /* Toute la barre est le champ : le curseur texte partout, sauf sur le bouton. */
+  cursor: text;
   transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
 }
+.chat-composer .chat-envoyer { cursor: pointer; }
+.chat-composer .chat-envoyer:disabled { cursor: default; }
 .chat-composer:focus-within {
   border-color: var(--color-primary-600);
   box-shadow: var(--ring);
@@ -1040,11 +1044,22 @@ h1, h2, h3, h4 {
   padding-bottom: 13px;
   color: var(--color-accent);
 }
+/* Le champ ne dessine AUCUNE boîte à lui.
+   Sans ça, dès qu'on clique dedans, deux cadres se superposent dans la barre :
+   la règle globale `:focus-visible` (ci-dessus) lui colle `box-shadow` + un
+   rayon, et certains navigateurs — mobiles surtout — rajoutent l'apparence
+   native d'un `textarea` par-dessus. On croit voir un second champ s'ouvrir
+   à l'intérieur du premier. Ici, la BARRE est le champ : c'est elle qui porte
+   le focus (`.chat-composer:focus-within`), le texte à l'intérieur n'en a pas. */
 .chat-composer textarea {
   flex: 1;
   min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
+  border-radius: 0;
   outline: none;
+  box-shadow: none;
   resize: none;
   background: transparent;
   color: var(--color-text);
@@ -1053,6 +1068,11 @@ h1, h2, h3, h4 {
   line-height: 1.5;
   padding: 10px 4px;
   max-height: 200px;
+}
+.chat-composer textarea:focus,
+.chat-composer textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 .chat-composer textarea::placeholder { color: var(--color-text-faint); }
 .chat-composer textarea:disabled { cursor: not-allowed; }
