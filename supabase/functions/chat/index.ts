@@ -53,10 +53,19 @@
      2. coller CE fichier entier, puis « Deploy function »
      3. onglet « Details » de la fonction → « Verify JWT with legacy secret » → OFF
      4. Edge Functions → Secrets → `MIMO_API_KEY` = la clé `tp-…`
-     5. SQL Editor → `scripts/assistant-limite.sql` → Run (le plafond par IP)
+     5. Edge Functions → Secrets → `EXA_API_KEY` = la clé Exa (`fd98…`)
+     6. SQL Editor → `scripts/assistant-limite.sql` → Run (le plafond par IP)
 
-   Secrets facultatifs, à créer seulement si besoin : `ORIGINES`, `PAYS`,
-   `MAX_PAR_MINUTE` (ils remplacent les valeurs par défaut ci-dessous).
+   Secrets facultatifs, à créer seulement si besoin : `EXA_URL`, `EXA_RESULTATS`,
+   `ORIGINES`, `PAYS`, `MAX_PAR_MINUTE` (ils remplacent les valeurs par défaut
+   ci-dessous).
+
+   ⚠️ LA RECHERCHE WEB (Exa) — POURQUOI ELLE AUSSI VIT ICI.
+   Même raison que la clé MiMo : une clé Exa dans le navigateur serait publique
+   et payée par n'importe qui. Elle reste donc côté serveur. Exa ne remplace pas
+   l'annuaire — la liste des commerces reste la source de vérité — il l'enrichit
+   avec ce qui bouge (horaires, avis récents, actualité locale). Sans clé Exa,
+   l'assistant répond quand même, sans web.
 
    En CLI, l'équivalent :
      supabase functions deploy chat --no-verify-jwt --project-ref rjsshcmszhxmldzucuqh
@@ -67,6 +76,19 @@
 const MIMO_URL = Deno.env.get('MIMO_URL') ?? 'https://token-plan-ams.xiaomimimo.com/v1/chat/completions'
 const MIMO_MODEL = Deno.env.get('MIMO_MODEL') ?? 'mimo-v2.5'
 const MIMO_API_KEY = Deno.env.get('MIMO_API_KEY') ?? ''
+
+/* ── Exa — la recherche en temps réel ────────────────────────────────────
+   La clé Exa, comme celle du modèle, vit dans les secrets Supabase et ne sort
+   JAMAIS du serveur : c'est elle qui paie chaque recherche. On l'utilise pour
+   enrichir la réponse avec ce qui est à jour (horaires, actualité, avis
+   récents) — pas pour remplacer la liste des commerces, qui reste la source de
+   vérité. Absente, l'assistant continue sans web : un chat sans Exa vaut mieux
+   qu'un chat qui refuse de répondre.
+   ─────────────────────────────────────────────────────────────────────── */
+const EXA_API_KEY = Deno.env.get('EXA_API_KEY') ?? ''
+const EXA_URL = Deno.env.get('EXA_URL') ?? 'https://api.exa.ai/search'
+const EXA_RESULTATS = Number(Deno.env.get('EXA_RESULTATS') ?? 4)
+const CACHE_WEB_SECONDES = 120
 
 /** Injectés par la plateforme Supabase dans chaque fonction — pas à les définir. */
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -146,7 +168,13 @@ Si on t'écrit en créole réunionnais ou en anglais, tu réponds dans cette lan
 
 CE QUE TU SAIS
 - La liste des commerces de l'annuaire t'est donnée ci-dessous (nom, catégorie,
-  commune, téléphone, note). C'est ta SEULE source pour un commerce.
+  commune, téléphone, note). C'est ta source de vérité pour ce que l'annuaire
+  contient, et tu n'inventes jamais une fiche qui n'y est pas.
+- Quand elle est fournie, tu reçois aussi une section RÉSULTATS WEB (recherche
+  Exa) : pages de commerces, avis, actualité locale. Elle peut être plus à jour
+  que l'annuaire, mais aussi approximative — tu la recoupes et tu ne la présentes
+  jamais comme certaine. Un commerce vu seulement sur le web, tu le dis : « pas
+  dans notre annuaire, mais d'après le web… ».
 - Pour le reste — la vie à La Réunion : quartiers, plats, randonnées, démarches
   (CAF, préfecture, impôts), transports, saison cyclonique — tu réponds avec ce que
   tu sais, sans jouer l'expert et sans avoir peur de dire « je ne suis pas sûr ».
@@ -168,7 +196,9 @@ TES RÈGLES, dans l'ordre d'importance
 7. Aucun conseil médical, juridique ou fiscal engageant : tu orientes vers le bon
    interlocuteur.
 8. Aucune pub, aucune marque, aucun classement payant : tu proposes ce qui répond à
-   la demande, pas ce qui arrangerait quelqu'un.`
+   la demande, pas ce qui arrangerait quelqu'un.
+9. Quand tu t'appuies sur un RÉSULTAT WEB, tu peux citer le lien en markdown
+   ([titre](url)). Tu ne cites JAMAIS un lien que tu n'as pas reçu.`
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -257,6 +287,59 @@ async function lireCommerces(): Promise<{ texte: string; nombre: number }> {
   return { texte, nombre: lignes.length }
 }
 
+/* ── La recherche web en temps réel (Exa) ────────────────────────────────
+   On cherche à partir de la DERNIÈRE question de l'utilisateur, en la
+   ramenant vers La Réunion : sans ça, « un bon resto » ramène le monde entier.
+   Quatre résultats suffisent — au-delà, on paie des jetons sans rien ajouter.
+   C'est un COMPLÉMENT : si Exa tombe ou n'est pas configuré, on continue sans
+   lui (chaîne vide), jamais on ne bloque la réponse.
+   ─────────────────────────────────────────────────────────────────────── */
+let cacheWeb: { quand: number; question: string; texte: string } | null = null
+
+async function chercherWeb(question: string): Promise<string> {
+  const q = question.trim()
+  if (!EXA_API_KEY || !q) return ''
+  if (cacheWeb && cacheWeb.question === q && Date.now() - cacheWeb.quand < CACHE_WEB_SECONDES * 1000) {
+    return cacheWeb.texte
+  }
+
+  let reponse: Response
+  try {
+    reponse = await fetch(EXA_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': EXA_API_KEY },
+      body: JSON.stringify({
+        query: `${q} La Réunion`,
+        type: 'auto',
+        numResults: EXA_RESULTATS,
+        contents: { text: { maxCharacters: 500 } },
+      }),
+    })
+  } catch (err) {
+    console.error(`[chat] Exa injoignable : ${err}`)
+    return ''
+  }
+
+  if (!reponse.ok) {
+    // On journalise le statut, jamais le corps (il peut refléter la clé).
+    console.error(`[chat] Exa a refusé : ${reponse.status}`)
+    return ''
+  }
+
+  type Résultat = { title?: string; url?: string; text?: string }
+  const data = await reponse.json() as { results?: Résultat[] }
+  const texte = (data.results ?? [])
+    .filter((r) => (r.url ?? '').length > 0)
+    .map((r) => {
+      const extrait = (r.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 500)
+      return `- ${[r.title, r.url, extrait].filter(Boolean).join(' | ')}`
+    })
+    .join('\n')
+
+  cacheWeb = { quand: Date.now(), question: q, texte }
+  return texte
+}
+
 /* ── La porte ─────────────────────────────────────────────────────────────── */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -316,7 +399,21 @@ Deno.serve(async (req) => {
     }))
   if (messages.length === 0) return json({ error: 'aucun message' }, 400)
 
-  const { texte, nombre } = await lireCommerces()
+  // La liste et la recherche web partent ensemble : aucune des deux n'attend
+  // l'autre. La question qui pilote Exa est la dernière de l'utilisateur.
+  const question = [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
+  const [{ texte, nombre }, web] = await Promise.all([lireCommerces(), chercherWeb(question)])
+
+  const systemes = [
+    { role: 'system', content: PERSONA },
+    { role: 'system', content: `COMMERCES DE L'ANNUAIRE (${nombre} fiches)\n${texte}` },
+  ]
+  if (web) {
+    systemes.push({
+      role: 'system',
+      content: `RÉSULTATS WEB EN TEMPS RÉEL (source : Exa — à recouper, à citer si utile)\n${web}\n\nCes résultats peuvent être plus récents que l'annuaire, mais aussi approximatifs. Recoupe-les avec la liste des commerces ; pour les horaires, tarifs et disponibilités, renvoie vers le téléphone.`,
+    })
+  }
 
   let reponse: Response
   try {
@@ -326,8 +423,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MIMO_MODEL,
         messages: [
-          { role: 'system', content: PERSONA },
-          { role: 'system', content: `COMMERCES DE L'ANNUAIRE (${nombre} fiches)\n${texte}` },
+          ...systemes,
           ...messages,
         ],
         max_tokens: MAX_SORTIE,
