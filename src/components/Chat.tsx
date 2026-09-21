@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AGENT_URL, SUPABASE_ANON_KEY, hasAgent } from '../lib/config'
-import { IconSend, IconSparkles } from './Icons'
+import { IconPlus, IconSend, IconSparkles } from './Icons'
 
 /**
  * Le chat d'Annuaire 974 — désormais TOUT le site.
@@ -137,6 +137,9 @@ export function Chat() {
   const [souci, setSouci] = useState<string | null>(null)
   const champ = useRef<HTMLTextAreaElement>(null)
   const fil = useRef<HTMLDivElement>(null)
+  /* Compteur de conversation : « Nouvelle conversation » l'incrémente, ce qui
+     invalide toute réponse encore en vol (elle ne doit pas repeupler un fil vidé). */
+  const conversation = useRef(0)
 
   const vide = messages.length === 0
   const indisponible = !hasAgent || dispo === 'absente'
@@ -156,9 +159,19 @@ export function Chat() {
     f.scrollTo({ top: f.scrollHeight, behavior: 'smooth' })
   }, [messages, enCours, souci])
 
+  /** Repart à zéro : le fil se vide, l'accueil revient. */
+  function nouvelle() {
+    conversation.current += 1
+    setMessages([])
+    setSaisie('')
+    setSouci(null)
+    setEnCours(false)
+  }
+
   async function envoyer(texte: string) {
     const question = texte.trim()
     if (!question || enCours || indisponible) return
+    const cid = conversation.current
     const suite: Message[] = [...messages, { role: 'user', content: question }]
     setMessages(suite)
     setSaisie('')
@@ -177,6 +190,7 @@ export function Chat() {
         body: JSON.stringify({ messages: suite }),
       })
       const data = await reponse.json().catch(() => ({} as { reply?: string; message?: string }))
+      if (cid !== conversation.current) return // une « nouvelle conversation » est passée
       if (!reponse.ok || !data.reply) {
         setSouci(
           data.message
@@ -188,9 +202,10 @@ export function Chat() {
       }
       setMessages([...suite, { role: 'assistant', content: data.reply }])
     } catch {
+      if (cid !== conversation.current) return
       setSouci('Pas de connexion — réessaie dans un instant.')
     } finally {
-      setEnCours(false)
+      if (cid === conversation.current) setEnCours(false)
     }
   }
 
@@ -205,6 +220,15 @@ export function Chat() {
 
   return (
     <div className="chat">
+      {!vide && (
+        <div className="chat-barre">
+          <button className="chat-nouvelle" type="button" onClick={nouvelle}>
+            <IconPlus size={16} />
+            Nouvelle conversation
+          </button>
+        </div>
+      )}
+
       <div className={vide ? 'chat-fil vide' : 'chat-fil'} ref={fil} aria-live="polite">
         {vide ? (
           <div className="chat-accueil">

@@ -85,6 +85,12 @@ export const IconMinus = ({ size, ...p }: P) => (
   </svg>
 )
 
+export const IconPlus = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+
 export const IconArrowUp = ({ size, ...p }: P) => (
   <svg {...base(size)} {...p}>
     <path d="M12 19V5m-6 6 6-6 6 6" />

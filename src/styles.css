@@ -992,6 +992,30 @@ h1, h2, h3, h4 {
   max-width: 34ch;
 }
 
+/* La barre d'actions, au-dessus du fil (nouvelle conversation). */
+.chat-barre {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: var(--space-2);
+}
+.chat-nouvelle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
+}
+.chat-nouvelle:hover { color: var(--color-text); border-color: var(--color-primary-200); }
+.chat-nouvelle:active { transform: scale(.97); }
+
 /* La grande zone de saisie, collée en bas. */
 .chat-composer {
   display: flex;
