@@ -17,12 +17,14 @@
 //
 // Usage :
 //   node scripts/check-agent.mjs            → la fonction est-elle en ligne ? (gratuit)
+//   node scripts/check-agent.mjs --exa      → la recherche web (Exa) est-elle branchée ?
 //   node scripts/check-agent.mjs --tester   → les 3 questions (consomme le modèle),
-//                                             puis le plafond (gratuit, requêtes vides)
+//                                             puis Exa, le plafond et la barrière pays
 
 import { readFileSync } from 'node:fs'
 
 const ARG_TESTER = process.argv.includes('--tester')
+const ARG_EXA = process.argv.includes('--exa')
 
 /* ── La configuration, lue comme Vite la lit ─────────────────────────────── */
 function lireEnv() {
@@ -59,9 +61,14 @@ const ko = (t) => { echecs++; console.error(`❌ ${t}`) }
 
 /* ── 1. La fonction est-elle déployée ? ──────────────────────────────────── */
 // Un GET, jamais une inférence : si la fonction n'existe pas, on n'a rien payé.
+// La fonction récente se DÉCRIT dans sa réponse (les deux clés sont-elles posées ?) —
+// c'est gratuit, et ça évite d'attendre une réponse payante pour le savoir.
 let statut
+let config = null
 try {
-  statut = (await fetch(AGENT, { method: 'GET', headers: entetes })).status
+  const r = await fetch(AGENT, { method: 'GET', headers: entetes })
+  statut = r.status
+  config = await r.json().catch(() => null)
 } catch (err) {
   console.error(`⛔ Réseau : ${err.message}`)
   process.exit(1)
@@ -69,17 +76,76 @@ try {
 
 console.log(`── Fonction : ${AGENT}`)
 if (statut === 404) {
-  console.log('   ⏳ PAS DÉPLOYÉE (404). Le widget ne s\'affiche donc pas sur le site —')
+  console.log('   ⏳ PAS DÉPLOYÉE (404). Le chat l\'annonce donc honnêtement sur le site —')
   console.log('      pas de bouton mort. À faire : Supabase → Edge Functions → « chat »')
-  console.log('      → coller supabase/functions/chat/index.ts → Secret MIMO_API_KEY.')
+  console.log('      → coller supabase/functions/chat/index.ts → Secrets MIMO_API_KEY + EXA_API_KEY.')
   process.exit(0)
 }
-ok(`la fonction est déployée (HTTP ${statut} sur un GET) : ${statut === 405 ? 'elle refuse la lecture, c\'est voulu' : 'elle répond'}`)
+ok(`la fonction est déployée (HTTP ${statut} sur un GET)`)
+if (config && typeof config === 'object' && 'exa' in config) {
+  console.log(`   ⓘ elle se décrit : modèle « ${config.modele ?? '?'} » · Exa « ${config.exa ?? '?'} »`)
+}
 
-if (!ARG_TESTER) {
-  console.log('\nℹ️  Rien d\'autre testé (gratuit). Pour poser les 3 questions :')
-  console.log('    node scripts/check-agent.mjs --tester')
+if (!ARG_TESTER && !ARG_EXA) {
+  console.log('\nℹ️  Rien d\'autre testé (gratuit). Pour aller plus loin :')
+  console.log('    node scripts/check-agent.mjs --exa     (la recherche web est-elle branchée ?)')
+  console.log('    node scripts/check-agent.mjs --tester  (les 3 questions pièges)')
   process.exit(echecs > 0 ? 1 : 0)
+}
+
+// `--exa` seul : on ne paie QUE la question de la recherche web, rien d'autre.
+if (ARG_EXA && !ARG_TESTER) {
+  await verifierExa()
+  console.log(`\n${echecs === 0 ? '✅ Recherche Exa conforme.' : `❌ ${echecs} problème(s).`}`)
+  process.exit(echecs === 0 ? 0 : 1)
+}
+
+/* ── La recherche web (Exa), prouvée et non supposée ─────────────────────
+   Deux preuves, dans cet ordre :
+     1. la fonction dit ELLE-MÊME si `EXA_API_KEY` est posée (un GET, gratuit) ;
+     2. une question qui a besoin du web — la réponse porte alors `web > 0`,
+        le nombre de résultats Exa qui l'ont nourrie. C'est mesuré, pas deviné.
+   Le repli, si la fonction n'annonce pas encore `web` (ancienne version) : on
+   cherche un lien cité dans la réponse. Moins sûr, mais mieux que rien.
+   ────────────────────────────────────────────────────────────────────────── */
+async function verifierExa() {
+  console.log(`\n── « la recherche Exa »`)
+
+  if (config && typeof config.exa === 'string') {
+    if (config.exa === 'pret') ok('la fonction annonce EXA_API_KEY configurée')
+    else ko('la fonction annonce EXA_API_KEY ABSENTE — Supabase → Edge Functions → Secrets')
+  } else {
+    console.log("   ⓘ la fonction déployée ne se décrit pas (ancienne version) — on teste par la question.")
+  }
+
+  const question = 'Quels commerces ont ouvert récemment à Saint-Denis ? Cite tes sources.'
+  console.log(`   → ${question}`)
+  let corps
+  try {
+    const r = await fetch(AGENT, {
+      method: 'POST',
+      headers: { ...entetes, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: question }] }),
+    })
+    if (!r.ok) {
+      ko(`HTTP ${r.status} — voir les journaux de la fonction`)
+      return
+    }
+    corps = await r.json()
+  } catch (err) {
+    ko(`réseau : ${err.message}`)
+    return
+  }
+
+  if (typeof corps.web === 'number') {
+    if (corps.web > 0) ok(`Exa a fourni ${corps.web} résultat(s) web pour la question`)
+    else ko("Exa n'a fourni AUCUN résultat (clé absente, ou Exa injoignable) — journaux de la fonction")
+    return
+  }
+
+  const citeLien = /\]\(https?:\/\//.test(corps.reply ?? '')
+  if (citeLien) ok('la réponse cite un lien web (à défaut du compte de résultats)')
+  else ko("impossible de prouver l'usage d'Exa (fonction sans champ « web », aucun lien cité)")
 }
 
 /* ── La vérité terrain : ce que l'annuaire contient vraiment ─────────────── */
@@ -248,6 +314,7 @@ for (const q of QUESTIONS) {
   if (souci) ko(souci); else ok(q.nom)
 }
 
+await verifierExa()
 await verifierPlafond()
 await verifierPays()
 

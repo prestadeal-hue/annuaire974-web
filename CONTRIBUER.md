@@ -93,7 +93,7 @@ commit est bien sur `main`. Donc pousse quelque chose dont tu es content.
 | Adresse | Ce qui la publie |
 |---|---|
 | `prestadeal-hue.github.io/annuaire974-web` | **automatique** — à chaque push sur `main`, ~2 min |
-| `tisite.re/annuaire974` | **à la main** — `cd /annuaire974 && VITE_BASE=/annuaire974/ npm run build && bash /usr/local/bin/deploy-annuaire.sh` |
+| `tisite.re/annuaire974` | **à la main** — `cd /annuaire974 && bash scripts/deploy-tisite.sh` (le script build en base `/annuaire974/` puis rsync) |
 
 C'est le piège le plus bête de ce dépôt : pousser, vérifier GitHub Pages, croire
 que c'est fini — et Saïdou regarde `tisite.re`, où rien n'a bougé. **Après un
@@ -119,6 +119,11 @@ bord (Edge Functions → *Deploy updates*). Modifier le fichier ne change donc
 **rien** tant que ce geste n'est pas fait — c'est exactement le piège rencontré
 le 18/09 : le code avait changé dans le dépôt, la fonction en ligne, non. Dis-le
 à Saïdou quand tu touches à ce fichier.
+
+Ses **secrets** se posent au même endroit (Edge Functions → *Secrets*) :
+`MIMO_API_KEY` (le modèle) et `EXA_API_KEY` (la recherche temps réel). Une clé
+qui vit dans ce fichier de code au lieu des secrets serait **publiée** — ce
+dépôt est public. Sans `EXA_API_KEY`, l'assistant répond quand même, sans web.
 
 De même, `npm run check-agent` interroge la fonction **réellement déployée** :
 c'est le seul contrôle qui dit si les deux sont d'accord.

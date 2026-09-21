@@ -1,138 +1,124 @@
-# Annuaire 974 — App web PWA
+# Annuaire 974 — L'assistant des commerces de La Réunion
 
-Application web **100 % responsive** des commerces et prestataires de La Réunion,
-pensée mobile-first pour se rapprocher au maximum d'une application native.
-Projet réalisé pour **TiSite** (tisite.re).
+Une page TiSite (tisite.re) : **un assistant qui parle**. L'utilisateur pose une
+question sur les commerces et prestataires de La Réunion, l'assistant répond.
 
 ![stack](https://img.shields.io/badge/Vite%207-React%2019-7C3AED) ![pwa](https://img.shields.io/badge/PWA-installable-FB7185) ![ts](https://img.shields.io/badge/TypeScript-strict-3B0D73)
 
-## ✨ Fonctionnalités
+## Ce que le site est — et ce qu'il n'est plus
 
-- **Recherche instantanée** : nom, métier, commune + filtres catégories (chips) et communes
-- **Fiches commerce** : adresse, téléphone, WhatsApp, horaires, appel en 1 touche, partage natif (Web Share API)
-- **Avis clients** : notes 1–5 étoiles + commentaires, publiés via la RPC `publier_avis` (aucun compte requis)
-- **Favoris** : persistés localement (localStorage), disponibles hors-ligne
-- **Notifications** : nouveaux commerces, promos, astuces
-- **Thème clair / sombre** : suit le système, mémorisé
-- **PWA complète** : installable, service worker, données en cache, bandeau hors-ligne
-- **Nav native** : bottom tab bar + bouton retour Android/iOS fonctionnel (routing par hash)
+L'annuaire classique a été retiré (21/09/2026) : **plus de catégories, plus de
+listes de commerces, plus de fiches, plus de favoris/notifications/compte**. Il
+reste une seule page, le chat, encadré par le logo, le header et le footer TiSite.
+
+Le message d'accueil, mot pour mot :
+
+> Bonjour ! Je suis l'assistant Annuaire 974. Posez-moi une question sur les commerces de La Réunion.
+
+La grande zone de saisie est au centre de la page ; les réponses s'affichent en
+dessous. Le ton est **chaleureux, local, honnête** — comme un ami qui connaît
+l'île, qui tutoie, et qui dit franchement quand il ne sait pas.
 
 ## 🎨 Charte « tisite »
 
-Violet/indigo moderne + accents corail (choisie avec le client) :
+Même identité que le site **tisite.re** — sombre premium, émeraude profond + or.
+L'annuaire n'est pas un design à part : c'est une page TiSite, avec le même
+header (logo, CTA or) et le même footer.
 
-| Token | Clair | Sombre |
-|---|---|---|
-| `--brand` | `#7C3AED` | `#8B5CF6` |
-| `--accent` (corail) | `#F43F5E` | `#F43F5E` |
-| fond | `#FAF9FE` | `#14101F` |
+| Token | Valeur |
+|---|---|
+| `--color-primary` (fond header) | `#0B3D2E` |
+| `--color-primary-600` (accents) | `#1EA574` |
+| `--color-primary-500` | `#34D399` |
+| `--color-accent` (or, CTA) | `#E8B84B` |
+| fond | `#0A1410` |
+| surface | `#0F1D16` |
+| texte | `#E9F2EC` |
 
-Tous les tokens sont dans `src/styles.css`.
+Tokens dans `src/styles.css`. Fontes **Manrope** (titres) et **Inter** (corps),
+auto-hébergées dans `src/assets/fonts/`. Aucun émoji : les pictogrammes sont des
+SVG (`src/components/Icons.tsx`).
 
-## 🛰️ Données — Supabase en direct
+## 💬 L'assistant — MiMo + Exa, sans clé exposée
 
-L'app essaie dans l'ordre et bascule automatiquement :
+Le chat parle à une **Edge Function Supabase** (`supabase/functions/chat/index.ts`),
+jamais directement aux services. La fonction détient, côté serveur, **deux secrets** :
 
-1. **Supabase direct** (PostgREST, clé publique) — lecture, écriture des avis incluse (RPC `publier_avis`)
-2. **Jeu de démo local** — 24 commerces fictifs réalistes, si Supabase est injoignable
-   ou si la base n'est pas encore seedée (identifié « démo » dans l'app)
+| Secret | Rôle |
+|---|---|
+| `MIMO_API_KEY` | le modèle qui rédige la réponse |
+| `EXA_API_KEY` | la **recherche en temps réel** (Exa) qui enrichit la réponse |
 
-Le mode actif est affiché en bas de l'accueil et sur la page Compte.
+**Pourquoi pas une variable `VITE_*`** : toute variable `VITE_*` utilisée par le
+code finit dans le paquet JavaScript **public** — vérifié, la clé `anon` de
+Supabase y est en clair. Une clé `anon` est publique par conception ; une clé de
+modèle **ou de recherche**, elle, **paie**, et serait facturée à n'importe qui.
+Les deux vivent donc dans les secrets Supabase.
 
-> **Il n'y a pas d'API — et c'est une décision, pas un chantier en attente** (18/09/2026).
-> Une API REST Node.js avait été envisagée puis écartée : l'app lit et écrit déjà
-> directement dans Supabase, une API n'ajouterait qu'un serveur à maintenir et une
-> cible de déploiement de plus.
->
-> La branche « API d'abord » reste dans le code (`src/lib/api.ts`, gardée par `hasApi`)
-> mais **inerte** : `VITE_API_URL` doit rester **vide**. Renseignée mais injoignable,
-> elle ferait payer un aller-retour perdu à chaque chargement avant le repli Supabase —
-> exactement ce que portait `https://annuaire974-api.onrender.com` (un nom sans serveur
-> derrière, HTTP 404) avant d'être retiré.
+### Ce qu'Exa apporte
 
-## 💬 L'assistant — MiMo, sans clé exposée
+Exa ne remplace pas l'annuaire : la liste des commerces (lue côté serveur dans
+Supabase) reste la **source de vérité**. Exa vient **en complément**, à partir de
+la dernière question de l'utilisateur :
 
-Le bouton de discussion (en bas à droite) parle à une **Edge Function Supabase**
-(`supabase/functions/chat/index.ts`), jamais directement au modèle.
+- chercher des commerces en **temps réel** (au-delà de la base) ;
+- enrichir avec des données **actualisées** (horaires, actualité locale) ;
+- faire remonter des **avis clients** récents.
 
-**Pourquoi pas une variable `VITE_*`** (18/09/2026) : toute variable `VITE_*` utilisée
-par le code finit dans le paquet JavaScript **public** — c'est vérifié, la clé `anon`
-de Supabase y est en clair. Une clé `anon` est publique par conception ; une clé de
-modèle, elle, **paie**, et serait facturée à n'importe qui. Elle vit donc dans les
-secrets Supabase.
+Le modèle reçoit ces résultats dans un message système, avec pour consigne de les
+recouper, de ne jamais les présenter comme certains, et de citer le lien. Sans
+clé Exa, l'assistant répond quand même — sans web.
 
-Conséquence directe : **aucune variable d'environnement nouvelle**, ni sur GitHub Pages
-ni sur tisite.re. L'assistant réutilise l'URL et la clé `anon` déjà en place.
-
-Ce que la fonction garantit, côté serveur (le client n'est jamais cru) :
+### Ce que la fonction garantit, côté serveur (le client n'est jamais cru)
 
 | | |
 |---|---|
-| **Aucun commerce inventé** | La liste réelle lui est donnée dans son prompt : ce qu'il ne trouve pas, il ne l'a pas. Un numéro hors annuaire se voit dans `check-agent` |
+| **Aucun commerce inventé** | La liste réelle lui est donnée dans son prompt : ce qu'il ne trouve pas, il ne l'a pas |
 | **Bornes** | 10 messages, 1 500 caractères par message, 700 jetons de sortie |
-| **Un plafond par IP** | 20 questions par minute, tenu dans la base (`scripts/assistant-limite.sql`) — vérifié à chaque `check-agent` |
-| **Réunion + France** | Le pays vient de Cloudflare (`cf-ipcountry`). S'il manque, on **laisse passer** et on le note : deviner fermerait la porte à La Réunion un jour où l'en-tête change de nom |
-| **Le site et l'assistant voient la même chose** | Même requête PostgREST que `src/lib/api.ts` |
-| **Pas de bouton mort** | Le widget demande une fois si la fonction existe (un `GET`, gratuit). 404 (pas déployée) ou 403 (hors zone) → il ne s'affiche pas |
-| **Un appel sans clé n'arrive pas** | Mesuré : la passerelle refuse un `POST` sans `apikey` ni `Authorization` (`401 UNAUTHORIZED_NO_AUTH_HEADER`) avant même la fonction. Ce n'est pas une protection — la clé publique est dans le site — mais ça écarte les balayages au hasard |
+| **Un plafond par IP** | 20 questions par minute, tenu dans la base (`scripts/assistant-limite.sql`) |
+| **Réunion + France** | Le pays vient de Cloudflare (`cf-ipcountry`). S'il manque, on **laisse passer** et on le note |
+| **Pas de bouton mort** | Le chat demande une fois si la fonction existe (un `GET`, gratuit). 404 (pas déployée) ou 403 (hors zone) → il l'annonce honnêtement |
 
-**Déploiement** (aucune CLI nécessaire) :
+### Déploiement de la fonction (aucune CLI nécessaire)
 
 1. Supabase → **Edge Functions** → *Deploy a new function* → *Via Editor* → nom : `chat`
 2. Coller `supabase/functions/chat/index.ts` en entier, puis *Deploy function*
 3. Onglet **Details** de la fonction → *Verify JWT with legacy secret* → **OFF**
 4. Edge Functions → **Secrets** → `MIMO_API_KEY` = la clé `tp-…`
+5. Edge Functions → **Secrets** → `EXA_API_KEY` = la clé Exa (`fd98…`)
+6. SQL Editor → `scripts/assistant-limite.sql` → *Run* (le plafond par IP)
 
 > ⚠️ **L'étape 3 n'est pas une préférence, c'est une obligation.** Ce projet utilise les
 > clés 2026 (`sb_publishable_…`), qui **ne sont pas des JWT**. Avec *Verify JWT* activé
-> (le défaut), la passerelle rejette chaque appel en `401 {"error":"JWT is invalid"}` —
-> confirmé par l'équipe Supabase : `--no-verify-jwt` est requis dès qu'on appelle avec une
-> clé anon (publishable) ou secret.
+> (le défaut), la passerelle rejette chaque appel en `401 {"error":"JWT is invalid"}`.
 >
-> La contrepartie est réelle : **l'endpoint devient public**. La clé MiMo reste protégée,
-> la dépense beaucoup moins — d'où **trois barrières**, dans cet ordre :
->
-> 1. **l'origine** (`ORIGINES` : tisite.re, GitHub Pages, localhost) — un site tiers ne
->    peut pas s'en servir comme API. Barrière, pas serrure : une origine se falsifie.
-> 2. **le pays** (`PAYS`, défaut `RE,FR`) — c'est là que sont les utilisateurs. Le pays
->    vient de `cf-ipcountry` ; **s'il manque, on laisse passer**, et le pays est écrit
->    dans les journaux à chaque appel (c'est la seule façon de vérifier qu'il arrive).
-> 3. **le plafond par IP** (`scripts/assistant-limite.sql`, 20/min) — le seul qui compte
->    vraiment : il vit dans la base parce que deux instances de la fonction ne se parlent
->    pas, et un compteur en mémoire ne protégerait rien. Il est incrémenté **avant** la
->    lecture du corps et avant tout appel au modèle — donc un script qui martèle l'endpoint
->    est refusé sans dépenser un jeton, et le contrôle peut le prouver gratuitement.
->
-> Secrets facultatifs, à créer seulement si besoin : `ORIGINES`, `PAYS`,
-> `MAX_PAR_MINUTE`.
-
-**5.** SQL Editor → `scripts/assistant-limite.sql` → *Run* (le plafond par IP).
-Sans lui, la fonction laisse passer et le note dans ses journaux.
+> ⚠️ **Les étapes 4 et 5 se font ensemble** : sans `EXA_API_KEY`, l'assistant répond
+> toujours (la recherche web est simplement absente). Le fichier de la fonction **part
+> sur `main` comme le reste**, mais la fonction qui tourne chez Supabase est **collée à
+> la main** — modifier le fichier ne change rien tant que ce geste n'est pas fait.
 
 Puis, depuis un poste qui a le `.env` :
 
 ```bash
 npm run check-agent            # la fonction est-elle en ligne ? (gratuit)
-npm run check-agent -- --tester # 3 questions pièges (consomme le modèle)
+npm run check-agent -- --exa   # la recherche web est-elle branchée ? (1 question)
+npm run check-agent -- --tester # 3 questions pièges + Exa + plafond + pays
+npm run check-exa              # la clé Exa répond-elle en direct ? (hors Supabase)
 ```
 
-Le contrôle cherche exactement ce qui ne se voit pas à l'œil : un **numéro absent de
-l'annuaire**, un commerce annoncé qui n'existe pas, une réponse qui parle du modèle —
-puis il épuise le plafond avec des requêtes vides, ce qui prouve qu'il existe **sans
-payer une seule réponse du modèle**.
+### Les deux contrôles Exa, et pourquoi il y en a deux
 
-## 🗃️ Base de données — scripts SQL
-
-Introspection faite via PostgREST : le schéma **réel** diffère de la doc initiale
-(`commerces.commune` est une colonne **texte**, pas de `commune_id`/`whatsapp`/`nb_avis` ;
-`avis.utilisateur_id → utilisateurs` ; `notifications.est_lu`).
-
-| Script | Rôle |
+| Contrôle | Ce qu'il prouve |
 |---|---|
-| `scripts/rls-policies.sql` | **À exécuter en premier** — les tables contiennent déjà des données mais la clé publique voit 0 ligne (RLS fermée). Ajoute la lecture publique + l'insertion d'avis. Supabase → SQL Editor → Run. |
-| `scripts/seed.sql` | Optionnel — complète/homogénéise les données (10 catégories, 24 communes, 24 commerces, avis, notifs). Idempotent. |
+| `npm run check-agent -- --exa` | que la **fonction déployée** utilise Exa : elle s'auto-décrit au `GET` (clé posée ou non), puis une question web doit rendre `web > 0` (le nombre de résultats Exa qui l'ont nourrie) |
+| `npm run check-exa` | que la **clé Exa elle-même** est vivante, en direct, sans Supabase — utilisable par un agent (ou agent-reach) avant de compter sur la recherche temps réel |
 
-Après `rls-policies.sql`, l'app bascule automatiquement du mode démo vers les vraies données.
+## 🗃️ Base de données
+
+L'assistant lit les commerces **côté serveur** via PostgREST (même requête que
+l'ancienne app). Les scripts SQL utiles restent dans `scripts/` :
+`rls-policies.sql` (lecture publique), `seed.sql` (données), `assistant-limite.sql`
+(plafond par IP).
 
 ## 🚀 Démarrage
 
@@ -144,15 +130,17 @@ npm run build      # dist/ + sw.js + manifest
 npm run icons      # régénère les icônes PWA depuis public/logo-tisite.svg
 npm run check-secrets  # contrôle avant commit (règle inversée)
 npm run check-agent    # l'assistant est-il branché ? (voir § L'assistant)
+npm run check-exa      # la clé Exa répond-elle ? (voir § L'assistant)
 ```
 
 ## 🔐 Secrets
 
-`.env` contient uniquement la **clé publique** Supabase (publishable) : ce n'est pas un
-secret, elle est faite pour être exposée côté client. Le `.gitignore` suit la **règle
-inversée** du dépôt parent : tout est ignoré, on rallume au cas par cas, et
-`npm run check-secrets` bloque tout commit contenant une clé privée, un `sb_secret_`
-ou un JWT legacy.
+`.env` ne contient que la **clé publique** Supabase (publishable) : elle n'est pas
+un secret. La clé **Exa** est gardée dans le `.env` **local pour référence**, mais
+elle ne sert **pas** au build — elle doit vivre dans les secrets Supabase (voir
+§ L'assistant). Le `.gitignore` suit la **règle inversée** du dépôt parent : tout
+est ignoré, on rallume au cas par cas, et `npm run check-secrets` bloque tout
+commit contenant une clé privée, un `sb_secret_` ou un JWT legacy.
 
 ## 📦 Déploiement
 
@@ -161,34 +149,26 @@ Le build (`dist/`) est un site statique, en ligne à deux endroits :
 | Adresse | Qui déploie |
 |---|---|
 | https://prestadeal-hue.github.io/annuaire974-web/ | `.github/workflows/deploy.yml`, à chaque push sur `main` |
-| https://tisite.re/annuaire974/ | TiSite (nginx) |
+| https://tisite.re/annuaire974/ | TiSite (nginx), à la main : `bash scripts/deploy-tisite.sh` |
 
 ⚠️ **Un `git push` sur `main` est un déploiement en production** (GitHub Pages).
-Les règles git complètes (remote `deploy`, jamais de `--force`, secrets, marche à
-suivre des agents) vivent à un seul endroit : **`CONTRIBUER.md`**.
+Les règles git complètes vivent à un seul endroit : **`CONTRIBUER.md`**.
 
-Netlify, Vercel ou Cloudflare Pages conviendraient aussi — il n'y a aucun code serveur à
-héberger. Variables d'environnement à définir chez l'hébergeur (et dans `.env` pour un
-build local) :
+Variables d'environnement de build (une seule paire, non sensible) :
 
 ```
 VITE_SUPABASE_URL=https://rjsshcmszhxmldzucuqh.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
-VITE_API_URL=            # laisser VIDE — il n'y a pas d'API (voir § Données)
 ```
 
-L'assistant n'ajoute **rien** à cette liste (voir § L'assistant) : sa clé de modèle est un
-secret Supabase, pas une variable de build.
+L'assistant n'ajoute **rien** à cette liste : ses clés (MiMo, Exa) sont des secrets
+Supabase, pas des variables de build.
 
 ## 🗺️ Prochaines étapes
 
-- [x] `rls-policies.sql` exécuté (lecture publique OK)
-- [x] Seed exécuté : 10 catégories · 24 communes · 24 commerces · 8 avis — visibles via la clé publique
-- [x] RPC `publier_avis` active (formulaire d'avis sans compte, validé côté base)
-- [x] Publié sur GitHub + en ligne (GitHub Pages et tisite.re — voir § Déploiement)
-- [x] Architecture tranchée (18/09) : **pas d'API** — l'app parle à Supabase en direct
-- [x] Assistant : widget + Edge Function écrits (18/09) — la clé du modèle ne sort jamais du serveur
-- [x] Assistant : fonction `chat` déployée dans Supabase (*Verify JWT* **OFF**) + secret `MIMO_API_KEY`, vérifiée par `npm run check-agent -- --tester`
-- [ ] Assistant : exécuter `scripts/assistant-limite.sql` (plafond par IP) et re-coller la fonction (pays + plafond)
-- [ ] Assistant : écrire sa persona (`SOUL`) — aujourd'hui un prompt système sobre, dans la fonction
-- [ ] Comptes utilisateurs (auth) et favoris synchronisés
+- [x] Refonte : le site devient le chat (catégories, listes et fiches retirées)
+- [x] Chat centré façon ChatGPT, couleurs TiSite, message de bienvenue
+- [x] Exa branché côté serveur (recherche temps réel + avis) — code + doc
+- [x] Exa activé en ligne + persona complète de l'assistant
+- [x] Contrôles : `check-agent --exa` (fonction) et `check-exa` (clé, en direct)
+- [ ] Comptes utilisateurs (auth), si un jour le chat doit mémoriser les préférences

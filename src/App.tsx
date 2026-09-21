@@ -1,41 +1,23 @@
-import { AppProvider, useApp } from './context/AppContext'
-import { ToastProvider } from './components/Toast'
-import { Header, TabBar, OfflineBar } from './components/Shell'
-import { AgentChat } from './components/AgentChat'
-import { useHashRoute } from './hooks/useHashRoute'
+import { Header, OfflineBar } from './components/Shell'
+import { Footer } from './components/Footer'
 import { Home } from './pages/Home'
-import { CommerceDetail } from './pages/CommerceDetail'
-import { Favoris } from './pages/Favoris'
-import { Notifications } from './pages/Notifications'
-import { Compte } from './pages/Compte'
+import { useOnline } from './hooks/useOnline'
 
-function Router() {
-  const { online } = useApp()
-  const { route, navigate } = useHashRoute()
+/**
+ * Le site tient en une page : l'assistant, encadré par le header et le footer
+ * TiSite. Plus de routes, plus de liste : on parle, il répond.
+ */
+export default function App() {
+  const online = useOnline()
 
   return (
     <div className="app">
-      <Header route={route} navigate={navigate} />
+      <Header />
       <OfflineBar online={online} />
       <main className="app-main">
-        {route.name === 'home' && <Home navigate={navigate} />}
-        {route.name === 'commerce' && <CommerceDetail id={route.id} navigate={navigate} />}
-        {route.name === 'favoris' && <Favoris navigate={navigate} />}
-        {route.name === 'notifications' && <Notifications />}
-        {route.name === 'compte' && <Compte />}
+        <Home />
       </main>
-      <TabBar route={route} />
-      <AgentChat />
+      <Footer />
     </div>
-  )
-}
-
-export default function App() {
-  return (
-    <AppProvider>
-      <ToastProvider>
-        <Router />
-      </ToastProvider>
-    </AppProvider>
   )
 }

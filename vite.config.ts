@@ -16,15 +16,15 @@ export default defineConfig({
         name: 'Annuaire 974',
         short_name: 'Annuaire974',
         description:
-          'Tous les commerces et prestataires de La Réunion : recherche, avis, favoris. Hors-ligne inclus.',
+          "L'assistant des commerces et prestataires de La Réunion. Posez votre question, il répond.",
         lang: 'fr',
         dir: 'ltr',
         start_url: './',
         scope: './',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#0F0A1E',
-        theme_color: '#5B21B6',
+        background_color: '#0A1410',
+        theme_color: '#0B3D2E',
         categories: ['business', 'food', 'shopping', 'travel'],
         icons: [
           { src: 'icons/pwa-192.png', sizes: '192x192', type: 'image/png' },
@@ -40,26 +40,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: `${BASE}index.html`,
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/rjsshcmszhxmldzucuqh\.supabase\.co\/rest\/v1\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api',
-              expiration: { maxEntries: 200, maxAgeSeconds: 3600 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/.*\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: { maxEntries: 100, maxAgeSeconds: 1800 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+        // Plus de données à mettre en cache : le chat a besoin du réseau. On ne
+        // garde que la coquille de l'app (HTML, JS, CSS, images, fontes).
       },
     }),
   ],
