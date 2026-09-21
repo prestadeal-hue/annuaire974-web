@@ -11,7 +11,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'logo-tisite.svg'],
+      // `logo-tisite.svg` (l'ancien logo violet) est retiré : les icônes viennent
+      // maintenant de la marque TiSite — voir scripts/generate-icons.mjs.
+      includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Annuaire 974',
         short_name: 'Annuaire974',
@@ -39,6 +41,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // L'image de partage (180 Ko) ne s'affiche JAMAIS dans la page : elle
+        // est lue par les robots d'aperçu. La précacher mettrait 180 Ko dans le
+        // téléphone pour quelque chose que personne n'y verra jamais.
+        // Les icônes, elles, restent préchargées (elles étaient à 846 Ko ;
+        // depuis qu'elles sont en 256 couleurs, elles pèsent 180 Ko et
+        // l'installation hors-ligne fonctionne).
+        globIgnores: ['**/og-image.png'],
         navigateFallback: `${BASE}index.html`,
         // Plus de données à mettre en cache : le chat a besoin du réseau. On ne
         // garde que la coquille de l'app (HTML, JS, CSS, images, fontes).

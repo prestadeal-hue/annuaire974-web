@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  L'annuaire est une page unique, servie par nginx AVANT le site Astro de
+  tisite.re : le sitemap généré par Astro ne la connaît donc pas (vérifié le
+  21/09/2026 — sitemap-0.xml ne la contient pas). D'où ce sitemap à part.
+
+  Pour qu'il serve à quelque chose, il doit être déclaré : soit dans le
+  robots.txt de tisite.re (une ligne « Sitemap: … », les robots.txt en
+  acceptent plusieurs), soit déposé dans la Search Console. Sinon il existe
+  sans être lu — voir la section SEO du README.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://tisite.re/annuaire974/</loc>
+    <lastmod>2026-09-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

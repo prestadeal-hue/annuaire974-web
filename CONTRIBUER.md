@@ -157,4 +157,5 @@ poussée en production. Trois cas où l'on demande *avant* de pousser :
 | `scripts/check-agent.mjs` | l'assistant **en ligne** : numéros réels, aucun commerce inventé, plafond actif, réponse streamée (`--flux`) |
 | `src/lib/flux.ts` + `scripts/test-flux.mjs` | le lecteur de flux SSE, **hors React** pour être testable — `npm test` |
 | `scripts/assistant-limite.sql` | la table du plafond par IP (déjà créée côté Supabase) |
+| `scripts/generate-icons.mjs` + `scripts/generate-og.mjs` | les images : icônes PWA (marque TiSite) et `og-image.png` — `npm run icons` / `npm run og` |
 | `.github/workflows/deploy.yml` | typecheck + secrets → build → Pages |

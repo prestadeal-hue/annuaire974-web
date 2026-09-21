@@ -8,10 +8,49 @@
       // Thème unique : l'annuaire suit la charte sombre de tisite.re.
       document.documentElement.setAttribute('data-theme', 'sombre');
     </script>
+
+    <title>Annuaire 974 — l'assistant des commerces de La Réunion</title>
     <meta
       name="description"
-      content="Annuaire 974 — l'assistant des commerces et prestataires de La Réunion. Posez votre question, il répond."
+      content="Un plombier, un restaurant créole, une pharmacie de garde, un conseil pratique : posez votre question, l'assistant d'Annuaire 974 répond avec les commerces et prestataires de La Réunion."
     />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- ══ SEO ═══════════════════════════════════════════════════════════════
+         L'adresse canonique est tisite.re : c'est l'adresse qu'on fait
+         connaître, et c'est elle que Google doit indexer. Le site est aussi
+         servi sur GitHub Pages pour les aperçus de déploiement — deux adresses
+         pour un seul contenu, donc une canonique, sinon c'est du contenu
+         dupliqué et les signaux se divisent.
+
+         Les URL absolues sont écrites ici, à un seul endroit, exprès : ce
+         fichier est la source de la fiche publique (canonique, image de
+         partage). La changer se fait d'un coup, pas dans cinq balises.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <link rel="canonical" href="https://tisite.re/annuaire974/" />
+
+    <!-- Ce qu'on voit quand le lien circule (WhatsApp, Facebook, SMS…) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TiSite" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:url" content="https://tisite.re/annuaire974/" />
+    <meta property="og:title" content="Annuaire 974 — l'assistant des commerces de La Réunion" />
+    <meta
+      property="og:description"
+      content="Posez votre question : un artisan, un resto, une pharmacie de garde, un conseil sur l'île. L'assistant répond avec les commerces et prestataires de La Réunion, et dit franchement quand il ne trouve pas."
+    />
+    <meta property="og:image" content="https://tisite.re/annuaire974/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TiSite — Annuaire 974, l'assistant des commerces de La Réunion" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Annuaire 974 — l'assistant des commerces de La Réunion" />
+    <meta
+      name="twitter:description"
+      content="Un artisan, un resto, une pharmacie de garde, un conseil sur l'île : posez votre question, l'assistant répond."
+    />
+    <meta name="twitter:image" content="https://tisite.re/annuaire974/og-image.png" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -22,11 +61,114 @@
          du projet (/annuaire974/). Un lien écrit à la main en dur pointait sur
          /manifest.webmanifest, c'est-à-dire le manifeste du site tisite.re lui-
          même — un visiteur qui « installe » l'appareil ouvrait alors tisite.re. -->
-    <title>Annuaire 974 — L'assistant des commerces de La Réunion</title>
+
+    <!-- ══ La fiche machine ══════════════════════════════════════════════════
+         Un graphe JSON-LD : qui édite (TiSite), quel site, et ce qu'est cet
+         assistant. Le contenu est vérifiable ailleurs sur la page — l'adresse,
+         le téléphone et l'e-mail sont ceux du footer. Rien n'y est inventé :
+         du balisage qui ne correspond à rien de visible est du bruit, au mieux.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://tisite.re/#organisation",
+            "name": "TiSite",
+            "url": "https://tisite.re/",
+            "email": "info@tisite.re",
+            "telephone": "+262693478915",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Saint-Pierre",
+              "postalCode": "97410",
+              "addressRegion": "La Réunion",
+              "addressCountry": "RE"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://tisite.re/annuaire974/#site",
+            "url": "https://tisite.re/annuaire974/",
+            "name": "Annuaire 974",
+            "description": "L'assistant des commerces et des prestataires de La Réunion.",
+            "inLanguage": "fr-FR",
+            "publisher": { "@id": "https://tisite.re/#organisation" }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://tisite.re/annuaire974/#assistant",
+            "name": "Assistant Annuaire 974",
+            "url": "https://tisite.re/annuaire974/",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "inLanguage": "fr-FR",
+            "isPartOf": { "@id": "https://tisite.re/annuaire974/#site" },
+            "description": "Un assistant en français qui répond aux questions sur les commerces et prestataires de La Réunion : nom, commune, téléphone. Il cherche aussi sur le web ce qui bouge (horaires, avis récents) et renvoie vers le téléphone quand l'information doit être confirmée.",
+            "areaServed": { "@type": "AdministrativeArea", "name": "La Réunion" },
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+            "featureList": [
+              "Recherche parmi les commerces et prestataires de La Réunion",
+              "Réponse en français, en créole ou en anglais",
+              "Aucun compte, aucune publicité"
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
-    <noscript>Activez JavaScript pour utiliser Annuaire 974.</noscript>
+    <!-- ══ Ce que lisent les robots (et les visiteurs sans JavaScript) ═══════
+         Le site est une application : sans JavaScript, `#root` serait un
+         rectangle vide — donc rien à indexer, alors que c'est justement le
+         contenu qui dit de quoi cette page parle. On y met donc l'écran
+         d'accueil en clair, avec le texte réel de la page.
+
+         Ce bloc est retiré au démarrage (voir `src/main.tsx`) : il ne s'agit
+         pas d'un doublon à l'écran, mais de la page telle qu'elle existe avant
+         que le chat prenne le relais. Il porte les mêmes classes que
+         l'application, donc il en a déjà l'aspect — pas de saut visuel.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="root">
+      <div class="app">
+        <main class="app-main">
+          <div class="chat">
+            <div class="chat-fil vide">
+              <div class="chat-accueil">
+                <span class="kicker">Assistant Annuaire 974</span>
+                <h1 class="chat-titre">
+                  Bonjour ! Je suis l'assistant Annuaire 974. Posez-moi une question sur les
+                  commerces de La Réunion.
+                </h1>
+                <p class="chat-note">
+                  Un artisan, un restaurant, une pharmacie de garde, un conseil pratique :
+                  l'assistant cherche dans les commerces et prestataires de l'île — Saint-Denis,
+                  Saint-Pierre, Le Tampon, Saint-Paul, Saint-André et partout ailleurs — et vous
+                  donne le nom, la commune et le téléphone quand il les connaît. S'il ne trouve
+                  pas, il le dit franchement : il n'invente jamais un numéro ni une adresse.
+                </p>
+                <div class="chat-exemples">
+                  <span class="chip">Un plombier à Saint-Denis</span>
+                  <span class="chip">Les meilleurs restos créoles vers Saint-Pierre</span>
+                  <span class="chip">C'est quand la saison cyclonique ?</span>
+                  <span class="chip">Une pharmacie ouverte le dimanche au Tampon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <noscript>
+      L'assistant a besoin de JavaScript pour répondre. Vous pouvez aussi écrire à
+      <a href="mailto:info@tisite.re">info@tisite.re</a> — une page TiSite.
+    </noscript>
+
+    <!-- LE point d'entrée. Il n'y en a qu'un : sans cette ligne, Vite ne
+         construit aucun paquet JavaScript — et la page reste sur son contenu de
+         repli (belle et muette). Le build le dit (« 1 modules transformed » et
+         pas de `assets/index-*.js`), d'où l'intérêt de le regarder. -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

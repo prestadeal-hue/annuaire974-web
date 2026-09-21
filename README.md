@@ -41,6 +41,38 @@ Tokens dans `src/styles.css`. Fontes **Manrope** (titres) et **Inter** (corps),
 auto-hébergées dans `src/assets/fonts/`. Aucun émoji : les pictogrammes sont des
 SVG (`src/components/Icons.tsx`).
 
+Les icônes (favicon, PWA, apple-touch) viennent de la **marque TiSite**
+(`src/assets/brand/tisite-picto.png`) — le pictogramme émeraude et or, le même
+que tisite.re. Avant le 21/09/2026, elles étaient générées depuis
+`logo-tisite.svg`, l'épingle **violette** de l'ancien annuaire : l'appli
+installée affichait donc une pastille d'une autre marque que le site.
+`npm run icons` les régénère (marque ramenée à 78 % sur les icônes masquables,
+la zone que Android ne rogne pas).
+
+## 🔎 SEO
+
+Tout tient dans `index.html` — un seul fichier, relu d'un coup d'œil :
+
+| | |
+|---|---|
+| **Canonique** | `https://tisite.re/annuaire974/` — le site est aussi servi sur GitHub Pages pour les aperçus : deux adresses, un seul contenu, donc une canonique (sinon signaux divisés) |
+| **Open Graph + Twitter** | titre, description et `og:image`. C'est ce qui s'affiche quand le lien circule dans un groupe WhatsApp ou sur Facebook — sur une île où tout passe par le téléphone, c'est la première impression |
+| **`og-image.png`** (1200×630) | **générée**, pas dessinée : `npm run og` reprend le dégradé du hero, l'or et le wordmark TiSite (`scripts/generate-og.mjs`) |
+| **JSON-LD** | un graphe `Organization` (TiSite) + `WebSite` + `WebApplication` : qui édite, quel site, ce qu'est l'assistant, et la zone servie (La Réunion). Uniquement des informations vérifiables ailleurs sur la page |
+| **Contenu lisible sans JavaScript** | l'écran d'accueil en clair est écrit dans `#root` : sans ça, un robot (ou un visiteur sans JS) ne trouvait qu'un rectangle vide. `src/main.tsx` le retire au démarrage — pas de doublon à l'écran, et il porte les mêmes classes que l'app, donc pas de saut visuel |
+| **`public/sitemap.xml`** | l'annuaire est servi par nginx **avant** le site Astro : le sitemap de tisite.re ne le connaît pas (vérifié — `sitemap-0.xml` ne le contient pas) |
+
+⚠️ **Ce sitemap n'est lu par personne en l'état.** Pour qu'il serve, il faut le
+déclarer — une ligne dans le `robots.txt` de tisite.re (ils en acceptent
+plusieurs) :
+
+```
+Sitemap: https://tisite.re/annuaire974/sitemap.xml
+```
+
+...ou le déposer dans la Search Console. La page n'est pas pour autant
+introuvable : la page d'accueil de tisite.re pointe déjà vers l'annuaire.
+
 ## 💬 L'assistant — MiMo + Exa, sans clé exposée
 
 Le chat parle à une **Edge Function Supabase** (`supabase/functions/chat/index.ts`),
@@ -166,7 +198,8 @@ npm install
 npm run dev        # http://localhost:5174
 npm run typecheck  # 2 passes : src/ (navigateur) puis vite.config.ts (contexte Node)
 npm run build      # dist/ + sw.js + manifest
-npm run icons      # régénère les icônes PWA depuis public/logo-tisite.svg
+npm run icons      # régénère les icônes PWA depuis la marque TiSite
+npm run og         # régénère l'image de partage (og-image.png, 1200×630)
 npm test               # tests du lecteur de flux (Node 24+, aucun réseau)
 npm run check-secrets  # contrôle avant commit (règle inversée)
 npm run check-agent    # l'assistant est-il branché ? (voir § L'assistant)
@@ -213,4 +246,6 @@ Supabase, pas des variables de build.
 - [x] Contrôles : `check-agent --exa` (fonction) et `check-exa` (clé, en direct)
 - [x] Réponse **au fil de l'eau** (SSE) + contrôle `check-agent --flux` + `npm test`
 - [x] Ménage : code mort des pages retirées enlevé (CSS 1 132 → 654 lignes, 35 icônes → 4)
+- [x] SEO : canonique, Open Graph + `og-image.png`, JSON-LD, contenu lisible sans JS, sitemap
+- [x] Icônes PWA : passées de l'ancien logo violet à la marque TiSite (846 Ko → 180 Ko)
 - [ ] Comptes utilisateurs (auth), si un jour le chat doit mémoriser les préférences
