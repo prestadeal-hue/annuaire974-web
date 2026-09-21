@@ -360,6 +360,102 @@ async function chercherWeb(question: string): Promise<string> {
   return texte
 }
 
+/* ── La réponse au fil de l'eau ─────────────────────────────────────────────
+   Le site n'attend plus la fin pour parler : la réponse s'affiche pendant
+   qu'elle s'écrit. Un seul format sur le fil, le plus simple qui existe — SSE :
+   une ligne `data: {...}`, puis une ligne vide.
+
+     data: {"type":"delta","text":"Bon"}\n\n
+     data: {"type":"delta","text":"jour"}\n\n
+     data: {"type":"fin","fiches":24,"web":4}\n\n
+
+   `fin` porte ce que `check-agent --exa` lit pour PROUVER que la recherche web
+   tourne. Un arrêt en route arrive en `{"type":"erreur"}` : le site garde alors
+   ce qu'il a déjà reçu au lieu de tout jeter.
+
+   ⚠️ On ne transmet PAS le flux du modèle tel quel. On le retraduit. Deux
+   raisons : le site ne dépendrait plus du fournisseur (une ligne de son dialecte
+   changerait de forme demain), et on ne pourrait rien glisser APRÈS la dernière
+   ligne — or c'est exactement là que passe `fin`.
+   ─────────────────────────────────────────────────────────────────────────── */
+const evenement = (corps: unknown) => `data: ${JSON.stringify(corps)}\n\n`
+
+function reponseFlux(amont: Response, nombre: number, web: string): Response {
+  const encodeur = new TextEncoder()
+  const decodeur = new TextDecoder()
+
+  const flux = new ReadableStream<Uint8Array>({
+    async start(controleur) {
+      let texte = ''
+      let souci = ''
+      const ecrire = (corps: unknown) => controleur.enqueue(encodeur.encode(evenement(corps)))
+
+      try {
+        // Le modèle n'a pas forcément suivi : s'il répond d'un bloc, on le rend
+        // d'un bloc — un seul delta, et le site affiche la réponse. Le contraire
+        // (un flux vide parce que le format n'était pas le bon) serait invisible.
+        if (!(amont.headers.get('content-type') ?? '').includes('text/event-stream')) {
+          const data = await amont.json() as { choices?: { message?: { content?: string } }[] }
+          texte = data.choices?.[0]?.message?.content?.trim() ?? ''
+          if (texte) ecrire({ type: 'delta', text: texte })
+        } else {
+          const lecteur = amont.body!.getReader()
+          let tampon = ''
+          for (;;) {
+            const { done, value } = await lecteur.read()
+            if (done) break
+            tampon += decodeur.decode(value, { stream: true })
+            const lignes = tampon.split('\n')
+            tampon = lignes.pop() ?? '' // la dernière peut être coupée en deux
+            for (const ligne of lignes) {
+              const brut = ligne.trim()
+              if (!brut.startsWith('data:')) continue
+              const charge = brut.slice(5).trim()
+              if (!charge || charge === '[DONE]') continue
+              let evt: { choices?: { delta?: { content?: string } }[] }
+              try {
+                evt = JSON.parse(charge)
+              } catch {
+                continue // une ligne illisible ne casse pas le fil
+              }
+              const delta = evt.choices?.[0]?.delta?.content
+              if (delta) {
+                texte += delta
+                ecrire({ type: 'delta', text: delta })
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[chat] le flux s'est interrompu : ${err}`)
+        souci = "L'assistant s'est interrompu en route. Réessaie dans un instant."
+      }
+
+      // Rien reçu du tout : on le DIT. Un fil vide laisserait croire que
+      // l'assistant a répondu par du silence.
+      if (!texte && !souci) souci = "L'assistant n'a pas pu répondre à l'instant."
+
+      if (souci) {
+        ecrire({ type: 'erreur', message: souci })
+      } else {
+        ecrire({ type: 'fin', fiches: nombre, web: web ? web.split('\n').filter(Boolean).length : 0 })
+      }
+      controleur.close()
+    },
+  })
+
+  return new Response(flux, {
+    headers: {
+      ...CORS,
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      // Sans ça, un intermédiaire peut retenir le flux pour « l'optimiser » — et
+      // la réponse n'arriverait plus au fil de l'eau, c'est-à-dire plus du tout.
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
 /* ── La porte ─────────────────────────────────────────────────────────────── */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -387,6 +483,10 @@ Deno.serve(async (req) => {
       ok: true,
       modele: MIMO_API_KEY ? 'pret' : 'absent',
       exa: EXA_API_KEY ? 'pret' : 'absent',
+      // `flux` dit la VERSION du code déployé : cette fonction sait rendre la
+      // réponse au fil de l'eau. Absent de la réponse = une version antérieure
+      // est encore en ligne, et il faut recoller ce fichier.
+      flux: 'pret',
     })
   }
 
@@ -414,7 +514,7 @@ Deno.serve(async (req) => {
     }, 503)
   }
 
-  let corps: { messages?: { role?: string; content?: string }[] }
+  let corps: { messages?: { role?: string; content?: string }[]; stream?: boolean }
   try {
     corps = await req.json()
   } catch {
@@ -429,6 +529,13 @@ Deno.serve(async (req) => {
       content: String(m.content).slice(0, MAX_CARACTERES),
     }))
   if (messages.length === 0) return json({ error: 'aucun message' }, 400)
+
+  // Le site demande-t-il la réponse au fil de l'eau ? Un en-tête `Accept` fait
+  // aussi l'affaire : c'est ce que parle un client SSE (le contrôle
+  // `check-agent`). Les deux chemins rendent la MÊME réponse ; le flux ne change
+  // rien au contenu, il la fait arriver plus tôt.
+  const veutFlux = corps.stream === true
+    || (req.headers.get('accept') ?? '').includes('text/event-stream')
 
   // La liste et la recherche web partent ensemble : aucune des deux n'attend
   // l'autre. La question qui pilote Exa est la dernière de l'utilisateur.
@@ -459,6 +566,7 @@ Deno.serve(async (req) => {
         ],
         max_tokens: MAX_SORTIE,
         temperature: 0.4,
+        stream: veutFlux,
       }),
     })
   } catch (err) {
@@ -474,6 +582,11 @@ Deno.serve(async (req) => {
       : "L'assistant n'a pas pu répondre à l'instant."
     return json({ error: 'modele_refus', message }, 502)
   }
+
+  // Le flux part AVANT d'attendre le premier mot : c'est tout l'intérêt. Rien
+  // n'est perdu pour `check-agent` — `fin` porte `fiches` et `web` à la fin du
+  // fil, et le chemin JSON ci-dessous (sans `stream`) reste intact.
+  if (veutFlux) return reponseFlux(reponse, nombre, web)
 
   const data = await reponse.json() as { choices?: { message?: { content?: string } }[] }
   const reply = data.choices?.[0]?.message?.content?.trim()

@@ -5,7 +5,8 @@
  */
 
 const NAV = [
-  { label: 'Accueil', href: '#/' },
+  // `./` : plus de routeur ici, `#/` ne menait nulle part.
+  { label: 'Accueil', href: './' },
   { label: 'Le site TiSite', href: 'https://tisite.re' },
   { label: 'Nous écrire', href: 'mailto:info@tisite.re' },
 ]

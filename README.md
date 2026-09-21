@@ -15,9 +15,11 @@ Le message d'accueil, mot pour mot :
 
 > Bonjour ! Je suis l'assistant Annuaire 974. Posez-moi une question sur les commerces de La Réunion.
 
-La grande zone de saisie est au centre de la page ; les réponses s'affichent en
-dessous. Le ton est **chaleureux, local, honnête** — comme un ami qui connaît
-l'île, qui tutoie, et qui dit franchement quand il ne sait pas.
+La grande zone de saisie reste **collée en bas** de l'écran (comme ChatGPT) ;
+l'accueil est centré tant qu'il n'y a pas de message, puis la conversation prend
+la place. **La réponse s'affiche pendant qu'elle s'écrit**, mot après mot, au lieu
+d'arriver d'un bloc à la fin. Le ton est **chaleureux, local, honnête** — comme un
+ami qui connaît l'île, qui tutoie, et qui dit franchement quand il ne sait pas.
 
 ## 🎨 Charte « tisite »
 
@@ -69,6 +71,39 @@ Le modèle reçoit ces résultats dans un message système, avec pour consigne d
 recouper, de ne jamais les présenter comme certains, et de citer le lien. Sans
 clé Exa, l'assistant répond quand même — sans web.
 
+### La réponse au fil de l'eau (SSE)
+
+Depuis le 21/09/2026, la fonction rend la réponse **pendant qu'elle s'écrit** :
+le visiteur voit le premier mot arriver en quelques centaines de millisecondes au
+lieu de fixer trois points pendant cinq secondes. Le format sur le fil est le plus
+simple qui existe — **SSE** : une ligne `data: {...}`, puis une ligne vide.
+
+```
+data: {"type":"delta","text":"Bon"}
+data: {"type":"delta","text":"jour"}
+data: {"type":"fin","fiches":24,"web":4}
+```
+
+- `delta` : un morceau à **concaténer** (jamais à remplacer) ;
+- `fin` : la réponse est complète, avec `fiches` et `web` — ce que
+  `check-agent --flux` et `--exa` lisent pour prouver, et non supposer ;
+- `erreur` : le serveur s'est arrêté en route. **Ce qui est déjà reçu reste à
+  l'écran** — le jeter effacerait du travail déjà payé.
+
+Deux garanties qui comptent plus que le gain de vitesse :
+
+- **le site marche même si la fonction déployée est l'ancienne** : elle répond
+alors en JSON, et le client bascule sur ce chemin là sans rien casser (vérifié en
+ligne le 21/09, fonction pas encore recollée) ;
+- **le flux n'est pas celui du modèle** : la fonction le retraduit. Le site ne
+dépend donc pas du fournisseur, et on peut glisser `fin` APRÈS le dernier mot —
+impossible si on transmettait le flux tel quel.
+
+Le découpage d'un flux (morceau coupé en deux par le réseau, accent à cheval sur
+deux paquets, ligne parasite) vit dans `src/lib/flux.ts`, **séparé du React** pour
+être testable : `npm test`. C'est la partie qui casse en silence, donc celle qui a
+des tests.
+
 ### Ce que la fonction garantit, côté serveur (le client n'est jamais cru)
 
 | | |
@@ -102,16 +137,20 @@ Puis, depuis un poste qui a le `.env` :
 ```bash
 npm run check-agent            # la fonction est-elle en ligne ? (gratuit)
 npm run check-agent -- --exa   # la recherche web est-elle branchée ? (1 question)
-npm run check-agent -- --tester # 3 questions pièges + Exa + plafond + pays
+npm run check-agent -- --flux  # la réponse arrive-t-elle au fil de l'eau ? (1 question)
+npm run check-agent -- --tester # 3 questions pièges + Exa + flux + plafond + pays
 npm run check-exa              # la clé Exa répond-elle en direct ? (hors Supabase)
+npm test                       # le découpage des flux (aucun réseau, aucun jeton)
 ```
 
-### Les deux contrôles Exa, et pourquoi il y en a deux
+### Les contrôles, et ce que chacun prouve
 
 | Contrôle | Ce qu'il prouve |
 |---|---|
 | `npm run check-agent -- --exa` | que la **fonction déployée** utilise Exa : elle s'auto-décrit au `GET` (clé posée ou non), puis une question web doit rendre `web > 0` (le nombre de résultats Exa qui l'ont nourrie) |
+| `npm run check-agent -- --flux` | que la fonction déployée **streame** : le `GET` annonce `flux: "pret"`, puis une vraie question doit rendre **plusieurs** morceaux. Un seul morceau de 800 caractères, c'est la réponse d'un bloc — le contrôle le dit au lieu de le cacher |
 | `npm run check-exa` | que la **clé Exa elle-même** est vivante, en direct, sans Supabase — utilisable par un agent (ou agent-reach) avant de compter sur la recherche temps réel |
+| `npm test` | que le **lecteur de flux** encaisse les découpages traîtres : événement coupé en deux paquets, deux événements collés, accent à cheval sur deux paquets, ligne illisible, fin sans retour à la ligne, abandon en cours de route |
 
 ## 🗃️ Base de données
 
@@ -128,6 +167,7 @@ npm run dev        # http://localhost:5174
 npm run typecheck  # 2 passes : src/ (navigateur) puis vite.config.ts (contexte Node)
 npm run build      # dist/ + sw.js + manifest
 npm run icons      # régénère les icônes PWA depuis public/logo-tisite.svg
+npm test               # tests du lecteur de flux (Node 24+, aucun réseau)
 npm run check-secrets  # contrôle avant commit (règle inversée)
 npm run check-agent    # l'assistant est-il branché ? (voir § L'assistant)
 npm run check-exa      # la clé Exa répond-elle ? (voir § L'assistant)
@@ -171,4 +211,6 @@ Supabase, pas des variables de build.
 - [x] Exa branché côté serveur (recherche temps réel + avis) — code + doc
 - [x] Exa activé en ligne + persona complète de l'assistant
 - [x] Contrôles : `check-agent --exa` (fonction) et `check-exa` (clé, en direct)
+- [x] Réponse **au fil de l'eau** (SSE) + contrôle `check-agent --flux` + `npm test`
+- [x] Ménage : code mort des pages retirées enlevé (CSS 1 132 → 654 lignes, 35 icônes → 4)
 - [ ] Comptes utilisateurs (auth), si un jour le chat doit mémoriser les préférences

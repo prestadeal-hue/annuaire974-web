@@ -18,13 +18,15 @@
 // Usage :
 //   node scripts/check-agent.mjs            → la fonction est-elle en ligne ? (gratuit)
 //   node scripts/check-agent.mjs --exa      → la recherche web (Exa) est-elle branchée ?
+//   node scripts/check-agent.mjs --flux     → la réponse arrive-t-elle au fil de l'eau ?
 //   node scripts/check-agent.mjs --tester   → les 3 questions (consomme le modèle),
-//                                             puis Exa, le plafond et la barrière pays
+//                                             puis Exa, le flux, le plafond et le pays
 
 import { readFileSync } from 'node:fs'
 
 const ARG_TESTER = process.argv.includes('--tester')
 const ARG_EXA = process.argv.includes('--exa')
+const ARG_FLUX = process.argv.includes('--flux')
 
 /* ── La configuration, lue comme Vite la lit ─────────────────────────────── */
 function lireEnv() {
@@ -86,17 +88,19 @@ if (config && typeof config === 'object' && 'exa' in config) {
   console.log(`   ⓘ elle se décrit : modèle « ${config.modele ?? '?'} » · Exa « ${config.exa ?? '?'} »`)
 }
 
-if (!ARG_TESTER && !ARG_EXA) {
+if (!ARG_TESTER && !ARG_EXA && !ARG_FLUX) {
   console.log('\nℹ️  Rien d\'autre testé (gratuit). Pour aller plus loin :')
   console.log('    node scripts/check-agent.mjs --exa     (la recherche web est-elle branchée ?)')
+  console.log('    node scripts/check-agent.mjs --flux    (la réponse arrive-t-elle au fil de l\'eau ?)')
   console.log('    node scripts/check-agent.mjs --tester  (les 3 questions pièges)')
   process.exit(echecs > 0 ? 1 : 0)
 }
 
-// `--exa` seul : on ne paie QUE la question de la recherche web, rien d'autre.
-if (ARG_EXA && !ARG_TESTER) {
-  await verifierExa()
-  console.log(`\n${echecs === 0 ? '✅ Recherche Exa conforme.' : `❌ ${echecs} problème(s).`}`)
+// `--exa` / `--flux` : on ne paie que la ou les questions demandées, rien d'autre.
+if (!ARG_TESTER) {
+  if (ARG_EXA) await verifierExa()
+  if (ARG_FLUX) await verifierFlux()
+  console.log(`\n${echecs === 0 ? '✅ Conforme.' : `❌ ${echecs} problème(s).`}`)
   process.exit(echecs === 0 ? 0 : 1)
 }
 
@@ -146,6 +150,84 @@ async function verifierExa() {
   const citeLien = /\]\(https?:\/\//.test(corps.reply ?? '')
   if (citeLien) ok('la réponse cite un lien web (à défaut du compte de résultats)')
   else ko("impossible de prouver l'usage d'Exa (fonction sans champ « web », aucun lien cité)")
+}
+
+/* ── La réponse au fil de l'eau, prouvée et non supposée ────────────────
+   Deux preuves, une gratuite et une payante :
+     1. la fonction DIT qu'elle sait streamer (un GET, gratuit) ;
+     2. une vraie question doit rendre PLUSIEURS morceaux, et le premier doit
+        arriver bien avant le dernier. C'est ça, « au fil de l'eau » : un seul
+        morceau à la fin, c'est la réponse d'un bloc, et le visiteur attend.
+   Le repli si la fonction déployée est l'ancienne : on le dit franchement, avec
+   la marche à suivre — le site, lui, continue de fonctionner sans le flux.
+   ────────────────────────────────────────────────────────────────────── */
+async function verifierFlux() {
+  console.log(`\n── « la réponse au fil de l'eau »`)
+
+  if (config && typeof config.flux === 'string') ok('la fonction annonce qu\'elle sait streamer')
+  else console.log("   ⓘ la fonction déployée ne se décrit pas (pas de champ « flux ») — version antérieure.")
+
+  // Le lecteur de flux vit avec le site : c'est LUI qui tourne dans le
+  // navigateur, donc c'est lui qu'il faut exercer, pas une copie.
+  let lireFlux
+  try {
+    ({ lireFlux } = await import('../src/lib/flux.ts'))
+  } catch (err) {
+    console.log(`   ⓘ impossible de charger src/lib/flux.ts (${err.message}) — Node 24+ requis.`)
+    return
+  }
+
+  const question = 'Un plombier à Saint-Denis, en deux phrases.'
+  console.log(`   → ${question}`)
+  const debut = Date.now()
+  let premier = 0
+  let morceaux = 0
+  let texte = ''
+  let arret = ''
+
+  try {
+    const r = await fetch(AGENT, {
+      method: 'POST',
+      headers: { ...entetes, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: question }], stream: true }),
+    })
+    if (!r.ok) {
+      ko(`HTTP ${r.status} — voir les journaux de la fonction`)
+      return
+    }
+    if (!(r.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      const corps = await r.json().catch(() => ({}))
+      if (typeof corps.reply !== 'string' || !corps.reply) {
+        ko('réponse illisible')
+        return
+      }
+      ko("la fonction déployée répond d'un bloc : elle ne sait pas encore streamer")
+      console.log('     → Supabase → Edge Functions → « chat » → Deploy updates → coller')
+      console.log('       supabase/functions/chat/index.ts. Le site marche sans, mais le')
+      console.log("       visiteur attend la réponse entière avant de lire le premier mot.")
+      return
+    }
+    for await (const evt of lireFlux(r.body)) {
+      if (evt.type === 'delta') {
+        morceaux++
+        if (!premier) premier = Date.now() - debut
+        texte += evt.text
+      } else if (evt.type === 'erreur') arret = evt.message ?? 'arrêt en route'
+    }
+  } catch (err) {
+    ko(`réseau : ${err.message}`)
+    return
+  }
+
+  if (arret) { ko(`le flux s'est interrompu : ${arret}`); return }
+  if (!texte.trim()) { ko('flux vide — le visiteur ne verrait rien'); return }
+  if (morceaux < 2) {
+    ko(`un seul morceau de ${texte.length} caractères : la réponse arrive encore d'un bloc`)
+    console.log('     → le modèle n\'a pas rendu un flux. Vérifier MIMO_URL (elle doit parler')
+    console.log('       le dialecte OpenAI avec `stream: true`).')
+    return
+  }
+  ok(`${morceaux} morceaux, premier après ${premier} ms, réponse complète en ${Date.now() - debut} ms`)
 }
 
 /* ── La vérité terrain : ce que l'annuaire contient vraiment ─────────────── */
@@ -315,6 +397,7 @@ for (const q of QUESTIONS) {
 }
 
 await verifierExa()
+await verifierFlux()
 await verifierPlafond()
 await verifierPays()
 

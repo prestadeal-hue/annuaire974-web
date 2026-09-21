@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "test": "node --test scripts/test-flux.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "check-secrets": "node scripts/check-secrets.mjs",
     "check-agent": "node scripts/check-agent.mjs",

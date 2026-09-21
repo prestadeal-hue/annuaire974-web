@@ -20,7 +20,9 @@ export function Header() {
   return (
     <header className={scrolled ? 'site-header scrolled' : 'site-header'}>
       <div className="container bar">
-        <a className="brand" href="#/" aria-label="Annuaire 974 — Accueil">
+        {/* `./` et non `#/` : le site n'a plus de routeur, un `#/` ne menait
+            nulle part. Ici, on rechargera bien la page du chat. */}
+        <a className="brand" href="./" aria-label="Annuaire 974 — Accueil">
           <img src={`${import.meta.env.BASE_URL}logo/tisite-logo.png`} alt="TiSite" width="115" height="53" />
           <span className="brand-page">Annuaire 974</span>
         </a>

@@ -126,7 +126,14 @@ qui vit dans ce fichier de code au lieu des secrets serait **publiée** — ce
 dépôt est public. Sans `EXA_API_KEY`, l'assistant répond quand même, sans web.
 
 De même, `npm run check-agent` interroge la fonction **réellement déployée** :
-c'est le seul contrôle qui dit si les deux sont d'accord.
+c'est le seul contrôle qui dit si les deux sont d'accord. `npm run check-agent -- --flux`
+le dit pour la réponse au fil de l'eau : s'il répond « la fonction répond d'un bloc »,
+la fonction en ligne est une version antérieure — recoller `index.ts` dans Supabase
+(le site, lui, continue de fonctionner sans le flux).
+
+Avant de pousser, `npm test` : le découpage des flux a ses tests parce que c'est la
+partie qui casse en silence — un morceau coupé en deux par le réseau et le visiteur
+lit une réponse tronquée sans que rien ne soit rouge.
 
 ## Quand tu ne sais pas
 
@@ -147,6 +154,7 @@ poussée en production. Trois cas où l'on demande *avant* de pousser :
 | `CONTRIBUER.md` | **ce fichier** : les règles git et la boucle de travail — la seule source |
 | `README.md` | l'état du produit : fonctions, charte, déploiement, secrets |
 | `scripts/check-secrets.mjs` | ce qui est poussé ne doit contenir aucun secret |
-| `scripts/check-agent.mjs` | l'assistant **en ligne** : numéros réels, aucun commerce inventé, plafond actif |
+| `scripts/check-agent.mjs` | l'assistant **en ligne** : numéros réels, aucun commerce inventé, plafond actif, réponse streamée (`--flux`) |
+| `src/lib/flux.ts` + `scripts/test-flux.mjs` | le lecteur de flux SSE, **hors React** pour être testable — `npm test` |
 | `scripts/assistant-limite.sql` | la table du plafond par IP (déjà créée côté Supabase) |
 | `.github/workflows/deploy.yml` | typecheck + secrets → build → Pages |

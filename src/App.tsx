@@ -11,11 +11,13 @@ export default function App() {
   const online = useOnline()
 
   return (
-    <div className="app">
+    // `hors-ligne` laisse la place au bandeau : sans ça, la zone de saisie
+    // glisse sous l'écran pile quand le visiteur cherche pourquoi rien ne part.
+    <div className={online ? 'app' : 'app hors-ligne'}>
       <Header />
       <OfflineBar online={online} />
       <main className="app-main">
-        <Home />
+        <Home online={online} />
       </main>
       <Footer />
     </div>

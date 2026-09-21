@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AGENT_URL, SUPABASE_ANON_KEY, hasAgent } from '../lib/config'
+import { lireFlux } from '../lib/flux'
 import { IconPlus, IconSend, IconSparkles } from './Icons'
 
 /**
@@ -9,6 +10,12 @@ import { IconPlus, IconSend, IconSparkles } from './Icons'
  * Mise en page « ChatGPT » : le fil occupe la hauteur disponible et défile tout
  * seul, la zone de saisie reste COLLÉE EN BAS. À l'ouverture, l'accueil est
  * centré ; dès le premier message, la conversation prend la place.
+ *
+ * La réponse s'affiche PENDANT qu'elle s'écrit (voir `src/lib/flux.ts`) : le
+ * visiteur voit l'assistant travailler au lieu d'attendre une bulle vide. Si la
+ * fonction déployée ne sait pas encore streamer, le chemin JSON d'avant prend le
+ * relais sans que rien ne casse — un site ne doit jamais dépendre d'un
+ * déploiement qui n'a pas encore eu lieu.
  *
  * Il ne connaît AUCUNE clé : il appelle une Edge Function Supabase
  * (`supabase/functions/chat/`), qui garde côté serveur la clé du modèle (MiMo)
@@ -29,6 +36,10 @@ const EXEMPLES = [
   "C'est quand la saison cyclonique ?",
   'Une pharmacie ouverte le dimanche au Tampon',
 ]
+
+/** Combien de messages partent au serveur. Au-delà, la fonction coupe d'elle-même
+ *  (`MAX_MESSAGES` côté Edge Function) : autant ne pas envoyer ce qui sera jeté. */
+const MESSAGES_ENVOYES = 10
 
 /* ── Rendu markdown léger ────────────────────────────────────────────────────
    Le modèle répond en markdown (**gras**, listes « - », `code`, liens). Sans
@@ -52,8 +63,13 @@ function renduEnLigne(texte: string, cle: string): ReactNode[] {
     else if (tok.startsWith('`')) noeuds.push(<code key={k}>{tok.slice(1, -1)}</code>)
     else if (tok.startsWith('[')) {
       const lien = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(tok)
+      // Un lien que le modèle aurait fabriqué (jamais reçu dans les résultats
+      // web) reste du texte : on n'ouvre pas une porte qu'on n'a pas ouverte.
+      const sur = /^https?:\/\//i.test(lien?.[2] ?? '') ? lien?.[2] : undefined
       noeuds.push(
-        lien ? <a key={k} href={lien[2]} target="_blank" rel="noreferrer">{lien[1]}</a> : tok,
+        sur && lien
+          ? <a key={k} href={sur} target="_blank" rel="noreferrer noopener">{lien[1]}</a>
+          : tok,
       )
     } else noeuds.push(<em key={k}>{tok.slice(1, -1)}</em>)
     dernier = m.index + tok.length
@@ -129,20 +145,32 @@ function useAgentDisponible(): Disponibilite {
   return etat
 }
 
-export function Chat() {
+export function Chat({ online }: { online: boolean }) {
   const dispo = useAgentDisponible()
   const [messages, setMessages] = useState<Message[]>([])
   const [saisie, setSaisie] = useState('')
   const [enCours, setEnCours] = useState(false)
+  /** La réponse en train d'arriver. Vide tant que le premier mot n'est pas là. */
+  const [reponse, setReponse] = useState('')
   const [souci, setSouci] = useState<string | null>(null)
   const champ = useRef<HTMLTextAreaElement>(null)
   const fil = useRef<HTMLDivElement>(null)
   /* Compteur de conversation : « Nouvelle conversation » l'incrémente, ce qui
      invalide toute réponse encore en vol (elle ne doit pas repeupler un fil vidé). */
   const conversation = useRef(0)
+  /** La requête en cours, pour pouvoir la couper net si le visiteur repart à zéro. */
+  const enVol = useRef<AbortController | null>(null)
+  /* Le visiteur a-t-il le fil « collé » en bas ? S'il remonte lire un message, on
+     ne le ramène pas de force à chaque mot qui arrive. */
+  const coller = useRef(true)
+  /* Les morceaux sont regroupés par image d'écran : sur un téléphone, redessiner
+     à chaque jeton fait bégayer le défilement — exactement ce qu'on veut éviter. */
+  const aPeindre = useRef('')
+  const image = useRef<number | null>(null)
 
   const vide = messages.length === 0
   const indisponible = !hasAgent || dispo === 'absente'
+  const bloque = indisponible || !online
 
   /* La zone de saisie grandit avec le texte, jusqu'à un plafond. */
   useEffect(() => {
@@ -152,33 +180,67 @@ export function Chat() {
     t.style.height = `${Math.min(t.scrollHeight, 200)}px`
   }, [saisie])
 
-  /* À l'arrivée d'un message, on suit la conversation vers le bas. */
+  /* À l'arrivée d'un message, on suit la conversation vers le bas — mais
+     seulement si le visiteur y était déjà. Pendant que la réponse s'écrit, on
+     suit sans animation : une animation relancée à chaque mot donne un
+     défilement qui bave. */
   useEffect(() => {
     const f = fil.current
-    if (!f) return
-    f.scrollTo({ top: f.scrollHeight, behavior: 'smooth' })
-  }, [messages, enCours, souci])
+    if (!f || !coller.current) return
+    f.scrollTo({ top: f.scrollHeight, behavior: reponse ? 'auto' : 'smooth' })
+  }, [messages, enCours, souci, reponse])
 
-  /** Repart à zéro : le fil se vide, l'accueil revient. */
-  function nouvelle() {
-    conversation.current += 1
-    setMessages([])
-    setSaisie('')
-    setSouci(null)
-    setEnCours(false)
+  useEffect(() => () => { if (image.current !== null) cancelAnimationFrame(image.current) }, [])
+
+  function peindre(texte: string) {
+    aPeindre.current = texte
+    if (image.current !== null) return
+    image.current = requestAnimationFrame(() => {
+      image.current = null
+      setReponse(aPeindre.current)
+    })
   }
 
-  async function envoyer(texte: string) {
+  /** Repart à zéro : le fil se vide, l'accueil revient, la réponse en vol est coupée. */
+  function nouvelle() {
+    conversation.current += 1
+    enVol.current?.abort()
+    enVol.current = null
+    setMessages([])
+    setSaisie('')
+    setReponse('')
+    setSouci(null)
+    setEnCours(false)
+    champ.current?.focus()
+  }
+
+  /**
+   * `dejaAffiche` : la question est DÉJÀ dans le fil — c'est un « réessayer ».
+   * On la renvoie sans la dupliquer, sinon le visiteur verrait deux fois sa
+   * question après un échec réseau.
+   */
+  async function envoyer(texte: string, { dejaAffiche = false } = {}) {
     const question = texte.trim()
-    if (!question || enCours || indisponible) return
+    if (!question || enCours || bloque) return
+
     const cid = conversation.current
-    const suite: Message[] = [...messages, { role: 'user', content: question }]
+    const suite: Message[] = dejaAffiche
+      ? messages
+      : [...messages, { role: 'user', content: question }]
+    enVol.current?.abort()
+    const controleur = new AbortController()
+    enVol.current = controleur
+
     setMessages(suite)
     setSaisie('')
     setSouci(null)
+    setReponse('')
     setEnCours(true)
+    coller.current = true
+
+    let texte2 = ''
     try {
-      const reponse = await fetch(AGENT_URL, {
+      const r = await fetch(AGENT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,26 +249,69 @@ export function Chat() {
           apikey: SUPABASE_ANON_KEY,
           Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ messages: suite }),
+        body: JSON.stringify({ messages: suite.slice(-MESSAGES_ENVOYES), stream: true }),
+        signal: controleur.signal,
       })
-      const data = await reponse.json().catch(() => ({} as { reply?: string; message?: string }))
-      if (cid !== conversation.current) return // une « nouvelle conversation » est passée
-      if (!reponse.ok || !data.reply) {
-        setSouci(
-          data.message
-            ?? (reponse.status === 404
-              ? "L'assistant n'est pas encore en ligne sur ce site."
-              : "L'assistant ne répond pas pour l'instant. Réessaie dans un moment."),
-        )
+
+      const type = r.headers.get('content-type') ?? ''
+
+      // Fonction d'avant le flux (réponse JSON d'un bloc), ou refus (403, 429,
+      // 503…) : même traitement, un seul message lisible.
+      if (!r.ok || !r.body || !type.includes('text/event-stream')) {
+        const data = await r.json().catch(() => ({} as { reply?: string; message?: string }))
+        if (cid !== conversation.current) return
+        const reply = typeof data.reply === 'string' ? data.reply : ''
+        if (!r.ok || !reply) {
+          setSouci(
+            data.message
+              ?? (r.status === 404
+                ? "L'assistant n'est pas encore en ligne sur ce site."
+                : "L'assistant ne répond pas pour l'instant. Réessaie dans un moment."),
+          )
+          return
+        }
+        setMessages([...suite, { role: 'assistant', content: reply }])
         return
       }
-      setMessages([...suite, { role: 'assistant', content: data.reply }])
-    } catch {
+
+      // Chemin du flux : la réponse s'affiche pendant qu'elle s'écrit.
+      for await (const evt of lireFlux(r.body)) {
+        if (cid !== conversation.current) return // une « nouvelle conversation » est passée
+        if (evt.type === 'delta') {
+          texte2 += evt.text
+          peindre(texte2)
+        } else if (evt.type === 'erreur') {
+          setSouci(evt.message ?? "L'assistant s'est interrompu en route. Réessaie dans un instant.")
+        }
+      }
+
       if (cid !== conversation.current) return
-      setSouci('Pas de connexion — réessaie dans un instant.')
+      if (!texte2) {
+        setSouci("L'assistant n'a pas pu répondre à l'instant. Réessaie dans un moment.")
+        return
+      }
+      setMessages([...suite, { role: 'assistant', content: texte2 }])
+    } catch (err) {
+      if (cid !== conversation.current) return
+      // Un abandon volontaire (« Nouvelle conversation ») n'est pas une panne.
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      // La réponse s'est arrêtée en route : ce qui est arrivé reste à l'écran.
+      // Le jeter pour afficher « erreur » serait effacer du travail déjà payé.
+      if (texte2) setMessages([...suite, { role: 'assistant', content: texte2 }])
+      setSouci('La réponse s\'est arrêtée en route — vérifie ta connexion, puis réessaie.')
     } finally {
-      if (cid === conversation.current) setEnCours(false)
+      if (cid === conversation.current) {
+        if (image.current !== null) { cancelAnimationFrame(image.current); image.current = null }
+        setReponse('')
+        setEnCours(false)
+      }
     }
+  }
+
+  /** Le dernier échec a laissé une question sans réponse : on la renvoie telle quelle. */
+  function reessayer() {
+    const derniere = [...messages].reverse().find((m) => m.role === 'user')
+    if (derniere) void envoyer(derniere.content, { dejaAffiche: true })
   }
 
   function surTouche(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -217,6 +322,8 @@ export function Chat() {
       void envoyer(saisie)
     }
   }
+
+  const derniereEstUtilisateur = messages[messages.length - 1]?.role === 'user'
 
   return (
     <div className="chat">
@@ -229,14 +336,24 @@ export function Chat() {
         </div>
       )}
 
-      <div className={vide ? 'chat-fil vide' : 'chat-fil'} ref={fil} aria-live="polite">
+      <div
+        className={vide ? 'chat-fil vide' : 'chat-fil'}
+        ref={fil}
+        aria-busy={enCours}
+        onScroll={() => {
+          const f = fil.current
+          if (f) coller.current = f.scrollTop + f.clientHeight >= f.scrollHeight - 48
+        }}
+      >
         {vide ? (
           <div className="chat-accueil">
             <span className="kicker">Assistant Annuaire 974</span>
             <h1 className="chat-titre">{ACCUEIL}</h1>
-            {indisponible ? (
+            {bloque ? (
               <p className="chat-note" role="status">
-                L'assistant n'est pas joignable pour le moment. Reviens dans un petit moment.
+                {indisponible
+                  ? "L'assistant n'est pas joignable pour le moment. Reviens dans un petit moment."
+                  : 'Pas de connexion — l\u2019assistant a besoin d\u2019internet pour chercher.'}
               </p>
             ) : (
               <div className="chat-exemples">
@@ -254,20 +371,44 @@ export function Chat() {
               m.role === 'user' ? (
                 <p key={i} className="agent-moi">{m.content}</p>
               ) : (
-                <div key={i} className="agent-lui">
+                // `aria-live` seulement sur une réponse TERMINÉE : pendant le
+                // flux, chaque mot déclencherait une annonce chez les lecteurs
+                // d'écran — un bavardage insupportable.
+                <div key={i} className="agent-lui" aria-live={enCours ? 'off' : 'polite'}>
                   <Rendu texte={m.content} />
                 </div>
               ),
             )}
 
-            {enCours && (
+            {/* Le premier mot n'est pas encore là : trois points qui respirent. */}
+            {enCours && !reponse && (
               <span className="agent-points" role="status" aria-label="L'assistant écrit">
                 <span />
                 <span />
                 <span />
               </span>
             )}
-            {souci && <p className="agent-note" role="status">{souci}</p>}
+
+            {/* La réponse s'écrit : elle est ici, et pas encore dans le fil. */}
+            {enCours && reponse && (
+              <div className="agent-lui flux" aria-live="off">
+                <Rendu texte={reponse} />
+              </div>
+            )}
+
+            {souci && (
+              <p className="agent-note" role="status">
+                {souci}
+                {derniereEstUtilisateur && !enCours && (
+                  <>
+                    {' '}
+                    <button type="button" className="agent-relance" onClick={reessayer}>
+                      Réessayer
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
           </>
         )}
       </div>
@@ -294,16 +435,22 @@ export function Chat() {
           value={saisie}
           onChange={(e) => setSaisie(e.target.value)}
           onKeyDown={surTouche}
-          placeholder="Écris ta question… un resto, un artisan, un conseil sur l'île"
+          placeholder={
+            indisponible
+              ? "L'assistant n'est pas joignable pour l'instant"
+              : !online
+                ? 'Hors-ligne — reconnecte-toi pour poser ta question'
+                : "Écris ta question… un resto, un artisan, un conseil sur l'île"
+          }
           aria-label="Ta question à l'assistant"
           rows={1}
           maxLength={1500}
-          disabled={indisponible}
+          disabled={bloque}
         />
         <button
           className="btn btn-gold chat-envoyer"
           type="submit"
-          disabled={enCours || indisponible || saisie.trim().length === 0}
+          disabled={enCours || bloque || saisie.trim().length === 0}
           aria-label="Envoyer"
         >
           <IconSend size={18} />
